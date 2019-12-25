@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-
-VARIANT_NAME=kubectl VARIANT_DIR=$(dirname $0) variant2 $@

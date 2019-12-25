@@ -2,44 +2,75 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
-	"github.com/spf13/cobra"
 	"github.com/mumoshu/hcl2test/pkg/app"
+	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
 )
 
+type Main struct {
+	Stdout, Stderr io.Writer
+	Args           []string
+	Getenv         func(string) string
+}
+
 func main() {
-	err := Run(os.Args)
+	m := Main{
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+		Args:   os.Args,
+		Getenv: os.Getenv,
+	}
+	err := m.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v", err)
 		os.Exit(1)
 	}
 }
 
-func configureCommand(cli *cobra.Command, root app.JobSpec) (func([]string) map[string]interface{}, func() map[string]interface{}, error) {
+type Config struct {
+	Parameters func([]string) (map[string]interface{}, error)
+	Options    func() map[string]func() interface{}
+}
+
+func configureCommand(cli *cobra.Command, root app.JobSpec) (*Config, error) {
 	options := map[string]interface{}{}
 	optionFeeds := map[string]func() interface{}{}
 	for _, o := range root.Options {
 		var tpe cty.Type
 		tpe, diags := typeexpr.TypeConstraint(o.Type)
 		if diags != nil {
-			return nil, nil, diags
+			return nil, diags
+		}
+		var desc string
+		if o.Description != nil {
+			desc = *o.Description
 		}
 		switch tpe {
 		case cty.String:
 			var v string
-			cli.Flags().StringVar(&v, o.Name, "", o.Description)
+			if o.Short != nil {
+				cli.PersistentFlags().StringVarP(&v, o.Name, *o.Short, "", desc)
+			} else {
+				cli.PersistentFlags().StringVar(&v, o.Name, "", desc)
+			}
 			options[o.Name] = &v
 			optionFeeds[o.Name] = func() interface{} {
 				return v
 			}
 		case cty.Bool:
 			var v bool
-			cli.Flags().BoolVar(&v, o.Name, false, o.Description)
+			if o.Short != nil {
+				cli.PersistentFlags().BoolVarP(&v, o.Name, *o.Short, false, desc)
+			} else {
+				cli.PersistentFlags().BoolVar(&v, o.Name, false, desc)
+			}
 			options[o.Name] = &v
 			optionFeeds[o.Name] = func() interface{} {
 				return v
@@ -48,21 +79,24 @@ func configureCommand(cli *cobra.Command, root app.JobSpec) (func([]string) map[
 		if o.Default.Range().Start != o.Default.Range().End {
 
 		} else {
-			cli.MarkFlagRequired(o.Name)
+			cli.MarkPersistentFlagRequired(o.Name)
 		}
 	}
 	var minArgs int
 	var maxArgs int
 	paramFeeds := map[string]func(args []string) (interface{}, error){}
-	for i, p := range root.Parameters {
+	for i := range root.Parameters {
 		maxArgs += 1
-		if p.Default.Range().Start != p.Default.Range().End {
+		p := root.Parameters[i]
+		r := p.Default.Range()
+		if r.Start == r.End {
 			minArgs += 1
-		} else {
-
 		}
 		ii := i
 		paramFeeds[p.Name] = func(args []string) (interface{}, error) {
+			if len(args) <= ii {
+				return nil, nil
+			}
 			v := args[ii]
 			ty, err := typeexpr.TypeConstraint(p.Type)
 			if err != nil {
@@ -80,82 +114,152 @@ func configureCommand(cli *cobra.Command, root app.JobSpec) (func([]string) map[
 		}
 	}
 	cli.Args = cobra.RangeArgs(minArgs, maxArgs)
-	params := func(args []string) map[string]interface{} {
+	params := func(args []string) (map[string]interface{}, error) {
 		m := map[string]interface{}{}
 		for name, f := range paramFeeds {
 			v, err := f(args)
 			if err != nil {
-				panic(err)
+				return nil, err
 			}
 			m[name] = v
 		}
-		return m
+		return m, nil
 	}
-	opts := func() map[string]interface{} {
-		m := map[string]interface{}{}
+	opts := func() map[string]func() interface{} {
+		m := map[string]func() interface{}{}
 		for name, f := range optionFeeds {
-			m[name] = f()
+			m[name] = f
 		}
 		return m
+	}
+	return &Config{Parameters: params, Options: opts}, nil
+}
+
+func getMergedParamsAndOpts(cfgs map[string]*Config, cmdName string, args []string) (map[string]interface{}, map[string]interface{}, error) {
+	names := strings.Split(cmdName, " ")
+	optGetters := map[string]func() interface{}{}
+	for i := range names {
+		curName := strings.Join(names[:i+1], " ")
+		curCfg, ok := cfgs[curName]
+		if ok {
+			curOpts := curCfg.Options()
+			for n := range curOpts {
+				optGetters[n] = curOpts[n]
+			}
+		}
+	}
+	cfg := cfgs[cmdName]
+	params, err := cfg.Parameters(args)
+	if err != nil {
+		return nil, nil, err
+	}
+	opts := map[string]interface{}{}
+	for n, get := range optGetters {
+		opts[n] = get()
 	}
 	return params, opts, nil
 }
 
-func Run(osArgs []string) error {
-	dir := os.Getenv("VARIANT_DIR")
+func (m Main) Run() error {
+	dir := m.Getenv("VARIANT_DIR")
 
 	if dir == "" {
-		panic("VARIANT_DIR must be set")
+		return fmt.Errorf("VARIANT_DIR must be set")
 	}
 
 	ap, err := app.New(dir)
-
 	if err != nil {
-		ap.ExitWithError(err)
+		ap.PrintError(err)
+		return err
 	}
 
 	var rootName string
 	if rootName == "" {
-		rootName = os.Getenv("VARIANT_NAME")
+		rootName = m.Getenv("VARIANT_NAME")
 	}
 
 	if rootName == "" {
-		panic("rootName must be set")
+		return fmt.Errorf("rootName must be set")
 	}
 
-	var jobs map[string]app.JobSpec
+	jobs := map[string]app.JobSpec{}
 	jobs[rootName] = ap.Config.JobSpec
+	jobNames := []string{
+		rootName,
+	}
 	for _, j := range ap.Config.Jobs {
 		name := fmt.Sprintf("%s %s", rootName, j.Name)
 		jobs[name] = j
+		jobNames = append(jobNames, name)
 	}
 
-	commands := map[string]*cobra.Command{}
+	sort.Strings(jobNames)
 
-	for name, job := range jobs {
-		cli := &cobra.Command{
-			Use:   name,
-			Short: strings.Split(job.Description, "\n")[0],
-			Long:  job.Description,
+	commands := map[string]*cobra.Command{}
+	cfgs := map[string]*Config{}
+
+	for _, n := range jobNames {
+		name := n
+		job := jobs[name]
+		names := strings.Split(name, " ")
+		var parent *cobra.Command
+		cmdName := names[len(names)-1]
+		switch len(names) {
+		case 1:
+		default:
+			names = names[:len(names)-1]
+			var ok bool
+			parent, ok = commands[strings.Join(names, " ")]
+			if !ok {
+				for i := range names {
+					intName := strings.Join(names[:i+1], " ")
+					cur, ok := commands[intName]
+					if !ok {
+						cur = &cobra.Command{
+							Use: names[i],
+						}
+						parent.AddCommand(cur)
+						commands[intName] = cur
+					}
+					parent = cur
+				}
+			}
 		}
-		getParams, getOpts, err := configureCommand(cli, job)
+		var desc string
+		if job.Description != nil {
+			desc = *job.Description
+		}
+		cli := &cobra.Command{
+			Use:   cmdName,
+			Short: strings.Split(desc, "\n")[0],
+			Long:  desc,
+		}
+		cfg, err := configureCommand(cli, job)
 		if err != nil {
 			return err
 		}
-		cli.RunE = func(cmd *cobra.Command, osargs []string) error {
-			params := getParams(osArgs)
-			opts := getOpts()
+		cfgs[name] = cfg
+		cli.RunE = func(cmd *cobra.Command, args []string) error {
+			params, opts, err := getMergedParamsAndOpts(cfgs, name, args)
+			if err != nil {
+				return err
+			}
 			runs, err := ap.Run(job.Name, params, opts)
-			if len(runs.Steps) == 0 {
+			if err == nil && len(runs.Steps) == 0 {
 				return fmt.Errorf("Nothing to run. Printing usage.")
 			}
 			cmd.SilenceUsage = true
 			return err
 		}
 		commands[name] = cli
+		if parent != nil {
+			parent.AddCommand(cli)
+		}
 	}
 
-	return commands[rootName].Execute()
+	rootCmd := commands[rootName]
+	rootCmd.SetArgs(m.Args[1:])
+	return rootCmd.Execute()
 	//
 	//if err := ap.Run(cmd, args, opts); err != nil {
 	//	ap.ExitWithError(err)

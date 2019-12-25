@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+VARIANT_NAME=$0 VARIANT_DIR=$(dirname $0) variant2 $@

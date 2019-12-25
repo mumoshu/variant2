@@ -11,6 +11,7 @@ import (
 	gohcl2 "github.com/hashicorp/hcl/v2/gohcl"
 	hcl2parse "github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/mumoshu/hcl2test/pkg/conf"
+	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
 )
@@ -115,7 +116,7 @@ type ParameterSpec struct {
 	Envs    []EnvSource     `hcl:"env,block"`
 	Jobs    []JobSource     `hcl:"job,block"`
 
-	Description string `hcl:"description,attr"`
+	Description *string `hcl:"description,attr"`
 }
 
 type EnvSource struct {
@@ -132,7 +133,8 @@ type OptionSpec struct {
 
 	Type        hcl2.Expression `hcl:"type,attr"`
 	Default     hcl2.Expression `hcl:"default,attr"`
-	Description string          `hcl:"description,attr"`
+	Description *string         `hcl:"description,attr"`
+	Short       *string         `hcl:"short,attr"`
 }
 
 type VariableSpec struct {
@@ -148,7 +150,7 @@ type JobSpec struct {
 
 	Version *string `hcl:"version,attr"`
 
-	Description string          `hcl:"description,attr"`
+	Description *string         `hcl:"description,attr"`
 	Parameters  []ParameterSpec `hcl:"parameter,block"`
 	Options     []OptionSpec    `hcl:"option,block"`
 	Variables   []VariableSpec  `hcl:"variable,block"`
@@ -159,7 +161,7 @@ type JobSpec struct {
 }
 
 type HCL2Config struct {
-	Config  Config    `hcl:"config,block"`
+	Config  *Config    `hcl:"config,block"`
 	Jobs    []JobSpec `hcl:"job,block"`
 	Tests   []Test    `hcl:"test,block"`
 	JobSpec `hcl:",remain"`
@@ -258,7 +260,8 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 	}
 	jobCtx, err := createJobRunContext(cc, j, args, opts)
 	if err != nil {
-		app.ExitWithError(err)
+		app.PrintError(err)
+		return nil, err
 	}
 	//
 	//if len(j.Steps) > 0 {
@@ -335,7 +338,7 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 	return runs, nil
 }
 
-func (app *App) WriteDiagsAndExit(diagnostics hcl2.Diagnostics) {
+func (app *App) WriteDiags(diagnostics hcl2.Diagnostics) {
 	wr := hcl2.NewDiagnosticTextWriter(
 		os.Stderr, // writer to send messages to
 		app.Files, // the parser's file cache, for source snippets
@@ -343,16 +346,19 @@ func (app *App) WriteDiagsAndExit(diagnostics hcl2.Diagnostics) {
 		true,      // generate colored/highlighted output
 	)
 	wr.WriteDiagnostics(diagnostics)
-	os.Exit(1)
 }
 
 func (app *App) ExitWithError(err error) {
+	app.PrintError(err)
+	os.Exit(1)
+}
+
+func (app *App) PrintError(err error) {
 	switch diags := err.(type) {
 	case hcl2.Diagnostics:
-		app.WriteDiagsAndExit(diags)
+		app.WriteDiags(diags)
 	default:
 		fmt.Fprintf(os.Stderr, "%v", err)
-		os.Exit(1)
 	}
 }
 
@@ -435,7 +441,8 @@ func createJobRunContext(cc *HCL2Config, j JobSpec, givenParams map[string]inter
 
 		switch v.(type) {
 		case nil:
-			if p.Default != nil {
+			r := p.Default.Range()
+			if r.Start != r.End {
 				var vv cty.Value
 				defCtx := &hcl2.EvalContext{
 					Functions: conf.Functions("."),
@@ -444,12 +451,12 @@ func createJobRunContext(cc *HCL2Config, j JobSpec, givenParams map[string]inter
 					return nil, err
 				}
 				if vv.Type() != tpe {
-					return nil, fmt.Errorf("unexpected type: want %s, got %s", tpe.FriendlyName(), vv.Type().FriendlyName())
+					return nil, errors.WithStack(fmt.Errorf("unexpected type of value %v provided to parameter %q: want %s, got %s", vv, p.Name, tpe.FriendlyName(), vv.Type().FriendlyName()))
 				}
 				params[p.Name] = vv
 				continue
 			}
-			return nil, fmt.Errorf("missing value for %q", p.Name)
+			return nil, fmt.Errorf("missing value for parameter %q", p.Name)
 		}
 
 		if vty, err := gocty.ImpliedType(v); err != nil {
@@ -478,7 +485,8 @@ func createJobRunContext(cc *HCL2Config, j JobSpec, givenParams map[string]inter
 
 		switch v.(type) {
 		case nil:
-			if op.Default != nil {
+			r := op.Default.Range()
+			if r.Start != r.End {
 				var vv cty.Value
 				defCtx := &hcl2.EvalContext{
 					Functions: conf.Functions("."),
@@ -487,12 +495,12 @@ func createJobRunContext(cc *HCL2Config, j JobSpec, givenParams map[string]inter
 					return nil, err
 				}
 				if vv.Type() != tpe {
-					return nil, fmt.Errorf("unexpected type: want %s, got %s", tpe.FriendlyName(), vv.Type().FriendlyName())
+					return nil, errors.WithStack(fmt.Errorf("unexpected type of vaule %v provided to option %q: want %s, got %s", vv, op.Name, tpe.FriendlyName(), vv.Type().FriendlyName()))
 				}
 				opts[op.Name] = vv
 				continue
 			}
-			return nil, fmt.Errorf("missing value for %q", op.Name)
+			return nil, fmt.Errorf("missing value for option %q", op.Name)
 		}
 
 		if vty, err := gocty.ImpliedType(v); err != nil {

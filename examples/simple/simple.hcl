@@ -1,4 +1,4 @@
-parameter namespace {
+option namespace {
   description = "Namespace to interact with"
   type = string
   default = "default"

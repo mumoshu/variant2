@@ -1,9 +1,9 @@
-parameter namespace {
+option namespace {
   type = string
   short = "n"
 }
 
-parameter file {
+option file {
   type = string
   short = "f"
 }
