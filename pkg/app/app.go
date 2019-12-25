@@ -2,7 +2,9 @@ package app
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 
 	hcl2 "github.com/hashicorp/hcl/v2"
@@ -157,11 +159,13 @@ type JobSpec struct {
 
 	Concurrency *int `hcl:"concurrency,attr"`
 
+	SourceLocator hcl2.Expression `hcl:"__source_locator,attr"`
+
 	DeferredRuns hcl2.Body `hcl:",remain"`
 }
 
 type HCL2Config struct {
-	Config  *Config    `hcl:"config,block"`
+	Config  *Config   `hcl:"config,block"`
 	Jobs    []JobSpec `hcl:"job,block"`
 	Tests   []Test    `hcl:"test,block"`
 	JobSpec `hcl:",remain"`
@@ -384,22 +388,46 @@ func (app *App) runSteps(stepCtx *hcl2.EvalContext, stepResults map[string]cty.V
 		if err := gohcl2.DecodeBody(body, stepCtx, &def); err != nil {
 			return err
 		}
-		if def.AssertionToRun != nil {
-			r := def.AssertionToRun.Range()
-			if r.Start != r.End {
-				var assert bool
+		r := def.AssertionToRun.Range()
+		if r.Start != r.End {
+			var assert bool
 
-				diags := gohcl2.DecodeExpression(def.ScriptToRun, stepCtx, &assert)
-				if diags.HasErrors() {
-					return diags
-				}
-
-				if !assert {
-					return fmt.Errorf("assertion failed: %s", def.ScriptToRun)
-				}
+			diags := gohcl2.DecodeExpression(def.AssertionToRun, stepCtx, &assert)
+			if diags.HasErrors() {
+				return diags
 			}
+
+			if !assert {
+				fp, err := os.Open(def.AssertionToRun.Range().Filename)
+				if err != nil {
+					panic(err)
+				}
+				defer fp.Close()
+
+				start := def.AssertionToRun.Range().Start.Byte
+				b, err := ioutil.ReadAll(fp)
+				if err != nil {
+					panic(err)
+				}
+				last := def.AssertionToRun.Range().End.Byte + 1
+				expr := b[start:last]
+
+				traversals := def.AssertionToRun.Variables()
+				vars := map[string]interface{}{}
+				for _, t := range traversals {
+					ctyValue, err := t.TraverseAbs(stepCtx)
+					if err == nil {
+						src := b[t.SourceRange().Start.Byte:t.SourceRange().End.Byte+1]
+						vars[string(src)] = ctyValue
+					}
+				}
+
+				return fmt.Errorf("assertion failed: this expression must be true, but was false: %s: vars=%v", expr, vars)
+			}
+			continue
 		}
-		if def.ScriptToRun != nil {
+		scriptRange := def.ScriptToRun.Range()
+		if scriptRange.Start != scriptRange.End {
 			var script string
 
 			diags := gohcl2.DecodeExpression(def.ScriptToRun, stepCtx, &script)
@@ -516,13 +544,19 @@ func createJobRunContext(cc *HCL2Config, j JobSpec, givenParams map[string]inter
 		opts[op.Name] = val
 	}
 
+	context := map[string]cty.Value{}
+	{
+		context["sourcedir"] = cty.StringVal(filepath.Dir(j.SourceLocator.Range().Filename))
+	}
+
 	vars := map[string]cty.Value{}
 	varSpecs := append(append([]VariableSpec{}, cc.Variables...), j.Variables...)
 	varCtx := &hcl2.EvalContext{
 		Functions: conf.Functions("."),
 		Variables: map[string]cty.Value{
-			"param": cty.ObjectVal(params),
-			"opt":   cty.ObjectVal(opts),
+			"param":   cty.ObjectVal(params),
+			"opt":     cty.ObjectVal(opts),
+			"context": cty.ObjectVal(context),
 		},
 	}
 	for _, varSpec := range varSpecs {
@@ -554,9 +588,10 @@ func createJobRunContext(cc *HCL2Config, j JobSpec, givenParams map[string]inter
 	ctx := &hcl2.EvalContext{
 		Functions: conf.Functions("."),
 		Variables: map[string]cty.Value{
-			"param": cty.ObjectVal(params),
-			"opt":   cty.ObjectVal(opts),
-			"var":   cty.ObjectVal(vars),
+			"param":   cty.ObjectVal(params),
+			"opt":     cty.ObjectVal(opts),
+			"var":     cty.ObjectVal(vars),
+			"context": cty.ObjectVal(context),
 		},
 	}
 

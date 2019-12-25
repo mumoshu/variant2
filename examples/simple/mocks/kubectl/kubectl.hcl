@@ -9,5 +9,14 @@ option file {
 }
 
 job "apply" {
-  assert = (param.f == basename(context.sourcedir) + "/manifests/") && (param.namespace == "default")
+  variable d {
+    type = string
+    value = join("", list(dirname(dirname(context.sourcedir)), "/manifests/"))
+  }
+  step {
+    assert = opt.file == var.d
+  }
+  step {
+    assert = (opt.namespace == "default")
+  }
 }

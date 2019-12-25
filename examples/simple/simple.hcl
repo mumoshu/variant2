@@ -6,7 +6,9 @@ option namespace {
 }
 
 job "app deploy" {
-  script = <<EOS
-    kubectl -n ${param.namespace} apply -f ${context.sourcedir}/manifests/
+  step {
+    script = <<EOS
+    kubectl -n ${opt.namespace} apply -f ${context.sourcedir}/manifests/
 EOS
+  }
 }

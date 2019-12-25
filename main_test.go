@@ -31,12 +31,7 @@ func TestExamples(t *testing.T) {
 		},
 		{
 			cmd:  "kubectl",
-			args: []string{"kubectl", "apply", "--namespace", "ns1", "-f", "manifests/"},
-			dir:  "./examples/simple/mocks/kubectl",
-		},
-		{
-			cmd:  "kubectl",
-			args: []string{"kubectl", "apply", "-aah"},
+			args: []string{"kubectl", "apply", "--namespace", "default", "-f", "examples/simple/manifests/"},
 			dir:  "./examples/simple/mocks/kubectl",
 		},
 	}
