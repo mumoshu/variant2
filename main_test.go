@@ -26,7 +26,13 @@ func TestExamples(t *testing.T) {
 		},
 		{
 			cmd:  "simple",
+			// TODO this should fail. Impelemnt shell runner
 			args: []string{"simple", "app", "deploy", "--namespace", "ns1"},
+			dir:  "./examples/simple",
+		},
+		{
+			cmd:  "simple",
+			args: []string{"simple", "app", "deploy", "--namespace", "default"},
 			dir:  "./examples/simple",
 		},
 		{
