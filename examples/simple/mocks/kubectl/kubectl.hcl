@@ -13,10 +13,8 @@ job "apply" {
     type = string
     value = join("", list(dirname(dirname(context.sourcedir)), "/manifests/"))
   }
-  step {
-    assert = opt.file == var.d
-  }
-  step {
-    assert = (opt.namespace == "default")
+
+  assert "args" {
+    condition = (abspath(opt.file) == abspath(var.d)) && (opt.namespace == "default")
   }
 }

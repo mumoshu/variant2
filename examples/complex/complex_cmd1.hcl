@@ -6,16 +6,8 @@ job "cmd1" {
     description = "param2"
   }
 
-  run {
-    dynamic "step" {
-      for_each = ["a", "b", "c"]
-      iterator = nested
-      content {
-        script = "dynamic block ${nested.value}"
-      }
-    }
-
-    step {
+  step "one" {
+    run "echo" {
       script = "cmd1 param1=${param.param1},param2=${param.param2}"
     }
   }

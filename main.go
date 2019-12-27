@@ -160,27 +160,14 @@ func getMergedParamsAndOpts(cfgs map[string]*Config, cmdName string, args []stri
 	return params, opts, nil
 }
 
-func (m Main) Run() error {
-	dir := m.Getenv("VARIANT_DIR")
-
-	if dir == "" {
-		return fmt.Errorf("VARIANT_DIR must be set")
-	}
-
+func (m *Main) initCommand(rootName string, dir string) (*app.App, *cobra.Command, error) {
 	ap, err := app.New(dir)
 	if err != nil {
 		ap.PrintError(err)
-		return err
+		return nil, nil, err
 	}
-
-	var rootName string
-	if rootName == "" {
-		rootName = m.Getenv("VARIANT_NAME")
-	}
-
-	if rootName == "" {
-		return fmt.Errorf("rootName must be set")
-	}
+	ap.Stdout = m.Stdout
+	ap.Stderr = m.Stderr
 
 	jobs := map[string]app.JobSpec{}
 	jobs[rootName] = ap.Config.JobSpec
@@ -236,7 +223,7 @@ func (m Main) Run() error {
 		}
 		cfg, err := configureCommand(cli, job)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		cfgs[name] = cfg
 		cli.RunE = func(cmd *cobra.Command, args []string) error {
@@ -244,8 +231,8 @@ func (m Main) Run() error {
 			if err != nil {
 				return err
 			}
-			runs, err := ap.Run(job.Name, params, opts)
-			if err == nil && len(runs.Steps) == 0 {
+			res, err := ap.Run(job.Name, params, opts)
+			if err == nil && res == nil {
 				return fmt.Errorf("Nothing to run. Printing usage.")
 			}
 			cmd.SilenceUsage = true
@@ -258,10 +245,60 @@ func (m Main) Run() error {
 	}
 
 	rootCmd := commands[rootName]
+
+	return ap, rootCmd, nil
+}
+
+func (m Main) Run() error {
+	dirFromEnv := m.Getenv("VARIANT_DIR")
+
+	dir := dirFromEnv
+
+	if dir == "" {
+		var err error
+		dir, err = os.Getwd()
+		if err != nil {
+			return err
+		}
+	}
+
+	rootName := m.Getenv("VARIANT_NAME")
+
+	var cmdName string
+	if rootName != "" {
+		cmdName = rootName
+	} else {
+		cmdName = "run"
+	}
+
+	ap, runRootCmd, err := m.initCommand(cmdName, dir)
+	if err != nil {
+		return err
+	}
+
+	if rootName != "" {
+		runRootCmd.SetArgs(m.Args[1:])
+		return runRootCmd.Execute()
+	}
+
+	rootCmd := &cobra.Command{
+		Use: "variant",
+	}
+	runCmd := &cobra.Command{
+		Use: "run [JOB NAME] [PARAMS] [OPTIONS]",
+		Short: "Run a job",
+	}
+	testCmd := &cobra.Command{
+		Use: "test [NAME]",
+		Short: "Run test(s)",
+		RunE: func(c *cobra.Command, args []string) error {
+			_, err := ap.RunTests()
+			return err
+		},
+	}
+	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(testCmd)
+	runCmd.AddCommand(runRootCmd)
 	rootCmd.SetArgs(m.Args[1:])
 	return rootCmd.Execute()
-	//
-	//if err := ap.Run(cmd, args, opts); err != nil {
-	//	ap.ExitWithError(err)
-	//}
 }

@@ -2,18 +2,20 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	hcl2 "github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/hcl/v2/ext/dynblock"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	gohcl2 "github.com/hashicorp/hcl/v2/gohcl"
 	hcl2parse "github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/mumoshu/hcl2test/pkg/conf"
 	"github.com/pkg/errors"
+	"github.com/variantdev/mod/pkg/shell"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
 )
@@ -59,55 +61,25 @@ type Config struct {
 	Directories *[]string `hcl:"directories,attr"`
 }
 
-type Runner struct {
-}
-
 type Step struct {
-	Name *string `hcl:"name,attr"`
-
-	Needs *[]string `hcl:"need,attr"`
-
-	DeferredStep hcl2.Body `hcl:",remain"`
-}
-
-type DeferredStep struct {
-	Runner *Runner `hcl:"runner,block"`
-
-	ScriptToRun hcl2.Expression `hcl:"script,attr"`
-
-	AssertionToRun hcl2.Expression `hcl:"assert,attr"`
-
-	Fail hcl2.Expression `hcl:"fail,attr"`
-
-	RunJob *JobToRun `hcl:"job,block"`
-}
-
-type JobToRun struct {
 	Name string `hcl:"name,label"`
 
-	Arguments map[string]cty.Value `hcl:",remain"`
+	Run *RunJob `hcl:"run,block"`
+
+	Needs *[]string `hcl:"need,attr"`
 }
 
-type DeferredRuns struct {
-	Steps []Step `hcl:"step,block"'`
+type Exec struct {
+	Command hcl2.Expression `hcl:"command,attr"`
 
-	Runs []Run `hcl:"run,block"`
+	Args hcl2.Expression `hcl:"args,attr"`
+	Env  hcl2.Expression `hcl:"env,attr"`
 }
 
-type Run struct {
-	Concurrency *int `hcl:"concurrency,attr"`
+type RunJob struct {
+	Name string `hcl:"name,label"`
 
-	Steps []Step `hcl:"step,block"'`
-
-	Phases []Phase `hcl:"phase,block"`
-}
-
-type Phase struct {
-	Name *string `hcl:"name,attr"`
-
-	Needs *[]string `hcl:"needs,attr"`
-
-	DeferredRuns hcl2.Body `hcl:",remain"`
+	Args map[string]hcl2.Expression `hcl:",remain"`
 }
 
 type ParameterSpec struct {
@@ -161,7 +133,18 @@ type JobSpec struct {
 
 	SourceLocator hcl2.Expression `hcl:"__source_locator,attr"`
 
-	DeferredRuns hcl2.Body `hcl:",remain"`
+	Exec   *Exec           `hcl:"exec,block"`
+	Assert []Assert        `hcl:"assert,block"`
+	Fail   hcl2.Expression `hcl:"fail,attr"`
+	Run    *RunJob         `hcl:"run,block"`
+
+	Steps []Step `hcl:"step,block"'`
+}
+
+type Assert struct {
+	Name string `hcl:"name,label"`
+
+	Condition hcl2.Expression `hcl:"condition,attr"`
 }
 
 type HCL2Config struct {
@@ -172,7 +155,17 @@ type HCL2Config struct {
 }
 
 type Test struct {
-	Body hcl2.Body `hcl:",remain"`
+	Name string `hcl:"name,label"`
+
+	Cases  []Case   `hcl:"case,block"`
+	Run    RunJob   `hcl:"run,block"`
+	Assert []Assert `hcl:"assert,block"`
+}
+
+type Case struct {
+	Name string `hcl:"name,label"`
+
+	Args map[string]hcl2.Expression `hcl:",remain"`
 }
 
 func (t *configurable) HCL2Config() (*HCL2Config, error) {
@@ -208,6 +201,10 @@ type App struct {
 	Files     map[string]*hcl2.File
 	Config    *HCL2Config
 	jobByName map[string]JobSpec
+
+	Stdout, Stderr io.Writer
+
+	TraceCommands []string
 }
 
 func New(dir string) (*App, error) {
@@ -251,7 +248,7 @@ func New(dir string) (*App, error) {
 	return app, nil
 }
 
-func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]interface{}) (*DeferredRuns, error) {
+func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]interface{}) (*Result, error) {
 	jobByName := app.jobByName
 	cc := app.Config
 
@@ -262,84 +259,19 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 			panic(fmt.Errorf("command %q not found", cmd))
 		}
 	}
-	jobCtx, err := createJobRunContext(cc, j, args, opts)
+	jobCtx, err := createJobContext(cc, j, args, opts)
 	if err != nil {
 		app.PrintError(err)
 		return nil, err
 	}
-	//
-	//if len(j.Steps) > 0 {
-	//	needs := map[string]cty.Value{}
-	//
-	//	stepCtx := jobCtx
-	//
-	//	if err := runSteps(stepCtx, needs, j.Steps); err != nil {
-	//		app.ExitWithError(err)
-	//	}
-	//
-	//	continue
-	//}
 
-	runs, err := createRuns(jobCtx, j.DeferredRuns)
-	if err != nil {
-		return runs, err
+	needs := map[string]cty.Value{}
+	res, err := app.execJobSteps(jobCtx, needs, j.Steps)
+	if res != nil || err != nil {
+		return res, err
 	}
 
-	if len(runs.Steps) > 0 {
-		needs := map[string]cty.Value{}
-
-		stepCtx := jobCtx
-
-		if err := app.runSteps(stepCtx, needs, runs.Steps); err != nil {
-			app.ExitWithError(err)
-		}
-
-		return runs, nil
-	}
-
-	phaseResults := map[string]cty.Value{}
-
-	stepCtx := jobCtx
-
-	for _, run := range runs.Runs {
-		if len(run.Steps) > 0 {
-			if run.Concurrency == nil {
-				run.Concurrency = j.Concurrency
-			}
-			needs := map[string]cty.Value{}
-
-			if err := app.runSteps(stepCtx, needs, run.Steps); err != nil {
-				return runs, err
-			}
-
-			continue
-		}
-
-		// TODO Sort phases by name and needs
-
-		for _, phase := range run.Phases {
-			phasedRuns, err := createRuns(stepCtx, phase.DeferredRuns)
-			if err != nil {
-				return runs, err
-			}
-
-			for _, pRun := range phasedRuns.Runs {
-				needs := map[string]cty.Value{}
-
-				if err := app.runSteps(stepCtx, needs, pRun.Steps); err != nil {
-					return runs, err
-				}
-			}
-
-			if phase.Name != nil && *phase.Name != "" {
-				phaseResults[*phase.Name] = cty.ObjectVal(stepCtx.Variables)
-				phaseResultsVal := cty.ObjectVal(phaseResults)
-				stepCtx.Variables["phase"] = phaseResultsVal
-			}
-		}
-	}
-
-	return runs, nil
+	return app.execJob(j, jobCtx)
 }
 
 func (app *App) WriteDiags(diagnostics hcl2.Diagnostics) {
@@ -366,96 +298,295 @@ func (app *App) PrintError(err error) {
 	}
 }
 
-func (app *App) runScript(script string) (cty.Value, error) {
-	println(script)
+func (app *App) execCmd(cmd string, args []string, env map[string]string, log bool) (*Result, error) {
+	app.TraceCommands = append(app.TraceCommands, fmt.Sprintf("%s %s", cmd, strings.Join(args, " ")))
 
-	// TODO exec with the runner
-	stdout := script
-	stderr := script
+	shellCmd := &shell.Command{
+		Name: cmd,
+		Args: args,
+		//Stdout: os.Stdout,
+		//Stderr: os.Stderr,
+		//Stdin:  os.Stdin,
+		Env: env,
+	}
 
-	return cty.ObjectVal(map[string]cty.Value{
-		"stdout": cty.StringVal(stdout),
-		"stderr": cty.StringVal(stderr),
-	}), nil
-}
+	sh := shell.Shell{
+		Exec: shell.DefaultExec,
+	}
 
-func (app *App) runSteps(stepCtx *hcl2.EvalContext, stepResults map[string]cty.Value, steps []Step) error {
-	// TODO Sort steps by name and needs
+	var opts shell.CaptureOpts
 
-	for _, s := range steps {
-		var def DeferredStep
-		body := dynblock.Expand(s.DeferredStep, stepCtx)
-		if err := gohcl2.DecodeBody(body, stepCtx, &def); err != nil {
-			return err
+	if log {
+		opts.LogStdout = func(line string) {
+			fmt.Fprintf(app.Stdout, "%s\n", line)
 		}
-		r := def.AssertionToRun.Range()
-		if r.Start != r.End {
-			var assert bool
-
-			diags := gohcl2.DecodeExpression(def.AssertionToRun, stepCtx, &assert)
-			if diags.HasErrors() {
-				return diags
-			}
-
-			if !assert {
-				fp, err := os.Open(def.AssertionToRun.Range().Filename)
-				if err != nil {
-					panic(err)
-				}
-				defer fp.Close()
-
-				start := def.AssertionToRun.Range().Start.Byte
-				b, err := ioutil.ReadAll(fp)
-				if err != nil {
-					panic(err)
-				}
-				last := def.AssertionToRun.Range().End.Byte + 1
-				expr := b[start:last]
-
-				traversals := def.AssertionToRun.Variables()
-				vars := map[string]interface{}{}
-				for _, t := range traversals {
-					ctyValue, err := t.TraverseAbs(stepCtx)
-					if err == nil {
-						src := b[t.SourceRange().Start.Byte:t.SourceRange().End.Byte+1]
-						vars[string(src)] = ctyValue
-					}
-				}
-
-				return fmt.Errorf("assertion failed: this expression must be true, but was false: %s: vars=%v", expr, vars)
-			}
-			continue
-		}
-		scriptRange := def.ScriptToRun.Range()
-		if scriptRange.Start != scriptRange.End {
-			var script string
-
-			diags := gohcl2.DecodeExpression(def.ScriptToRun, stepCtx, &script)
-			if diags.HasErrors() {
-				return diags
-			}
-
-			res, err := app.runScript(script)
-			if err != nil {
-				return err
-			}
-
-			// Save step outputs to allow reuses by later steps
-			if s.Name != nil {
-				stepResults[*s.Name] = res
-				stepResultsVal := cty.ObjectVal(stepResults)
-				stepCtx.Variables["step"] = stepResultsVal
-			}
-		} else if def.RunJob != nil {
-			panic("not implemented")
-		} else {
-			panic("either script or job must be defined")
+		opts.LogStderr = func(line string) {
+			fmt.Fprintf(app.Stderr, "%s\n", line)
 		}
 	}
+
+	// TODO exec with the runner
+	res, err := sh.Capture(shellCmd, opts)
+
+	re := &Result{
+		Stdout: res.Stdout,
+		Stderr: res.Stderr,
+	}
+
+	switch e := err.(type) {
+	case *exec.ExitError:
+		re.ExitStatus = e.ExitCode()
+	}
+
+	if err != nil {
+		return re, errors.Wrap(err, app.sanitize(fmt.Sprintf("command \"%s %s\"", cmd, strings.Join(args, " "))))
+	}
+
+	return re, nil
+}
+
+func (app *App) sanitize(str string) string {
+	return str
+}
+
+func (app *App) execJob(j JobSpec, ctx *hcl2.EvalContext) (*Result, error) {
+	var res *Result
+	var err error
+
+	if j.Exec != nil {
+		var cmd string
+		if diags := gohcl2.DecodeExpression(j.Exec.Command, ctx, &cmd); diags.HasErrors() {
+			return nil, diags
+		}
+
+		var args []string
+		if diags := gohcl2.DecodeExpression(j.Exec.Args, ctx, &args); diags.HasErrors() {
+			return nil, diags
+		}
+
+		var env map[string]string
+		if diags := gohcl2.DecodeExpression(j.Exec.Env, ctx, &env); diags.HasErrors() {
+			return nil, diags
+		}
+
+		res, err = app.execCmd(cmd, args, env, true)
+	} else if j.Run != nil {
+		res, err = app.execRun(ctx, j.Run)
+	}
+
+	if j.Assert != nil && len(j.Assert) > 0 {
+		for _, a := range j.Assert {
+			if err := app.execAssert(ctx, a); err != nil {
+				return nil, err
+			}
+		}
+		return &Result{}, nil
+	}
+	return res, err
+}
+
+func (app *App) execAssert(ctx *hcl2.EvalContext, a Assert) error {
+	var assert bool
+
+	cond := a.Condition
+
+	diags := gohcl2.DecodeExpression(cond, ctx, &assert)
+	if diags.HasErrors() {
+		return diags
+	}
+
+	if !assert {
+		fp, err := os.Open(cond.Range().Filename)
+		if err != nil {
+			panic(err)
+		}
+		defer fp.Close()
+
+		start := cond.Range().Start.Byte
+		b, err := ioutil.ReadAll(fp)
+		if err != nil {
+			panic(err)
+		}
+		last := cond.Range().End.Byte + 1
+		expr := b[start:last]
+
+		traversals := cond.Variables()
+		vars := []string{}
+		for _, t := range traversals {
+			ctyValue, err := t.TraverseAbs(ctx)
+			if err == nil {
+				v, err := app.ctyToGo(ctyValue)
+				if err != nil {
+					panic(err)
+				}
+				src := strings.TrimSpace(string(b[t.SourceRange().Start.Byte : t.SourceRange().End.Byte]))
+				vars = append(vars, fmt.Sprintf("%s=%v (%T)", string(src), v, v))
+			}
+		}
+
+		return fmt.Errorf("assertion %q failed: this expression must be true, but was false: %s, where %s", a.Name, expr, strings.Join(vars, " "))
+	}
+
 	return nil
 }
 
-func createJobRunContext(cc *HCL2Config, j JobSpec, givenParams map[string]interface{}, givenOpts map[string]interface{}) (*hcl2.EvalContext, error) {
+func (app *App) RunTests() (*Result, error) {
+	ctx := &hcl2.EvalContext{
+		Functions: conf.Functions("."),
+		Variables: map[string]cty.Value{},
+	}
+
+	var res *Result
+	var err error
+	for _, t := range app.Config.Tests {
+		res, err = app.execTest(t, ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (app *App) execTest(t Test, ctx *hcl2.EvalContext) (*Result, error) {
+	if len(t.Cases) > 0 {
+		var res *Result
+		var err error
+		for _, c := range t.Cases {
+			res, err = app.execTestCase(t, c, ctx)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return res, nil
+	}
+	return app.execTestCase(t, Case{}, ctx)
+}
+
+func (app *App) execTestCase(t Test, c Case, ctx *hcl2.EvalContext) (*Result, error) {
+	caseFields := map[string]cty.Value{}
+	for k, expr := range c.Args {
+		var v cty.Value
+		if diags := gohcl2.DecodeExpression(expr, ctx, &v); diags.HasErrors() {
+			return nil, diags
+		}
+		caseFields[k] = v
+	}
+	caseVal := cty.ObjectVal(caseFields)
+	ctx.Variables["case"] = caseVal
+
+	res, err := app.execRun(ctx, &t.Run)
+
+	// If there are one ore more assert(s), do not fail immediately and let the assertion(s) decide
+	if t.Assert != nil && len(t.Assert) > 0 {
+		for _, a := range t.Assert {
+			if err := app.execAssert(ctx, a); err != nil {
+				return nil, err
+			}
+		}
+		return &Result{}, nil
+	}
+
+	return res, err
+}
+
+type Result struct {
+	Stdout     string
+	Stderr     string
+	Noop       bool
+	ExitStatus int
+}
+
+func (res *Result) toCty() cty.Value {
+	return cty.ObjectVal(map[string]cty.Value{
+		"stdout":     cty.StringVal(res.Stdout),
+		"stderr":     cty.StringVal(res.Stderr),
+		"exitstatus": cty.NumberIntVal(int64(res.ExitStatus)),
+	})
+}
+
+func (app *App) execRun(jobCtx *hcl2.EvalContext, run *RunJob) (*Result, error) {
+	args := map[string]interface{}{}
+	for k := range run.Args {
+		var v cty.Value
+		if diags := gohcl2.DecodeExpression(run.Args[k], jobCtx, &v); diags.HasErrors() {
+			return &Result{
+				Noop: false,
+			}, diags
+		}
+		vv, err := app.ctyToGo(v)
+		if err != nil {
+			return nil, err
+		}
+		args[k] = vv
+	}
+
+	var err error
+	res, err := app.Run(run.Name, args, args)
+
+	runFields := map[string]cty.Value{}
+	if res != nil {
+		runFields["res"] = res.toCty()
+	}
+	if err != nil {
+		runFields["err"] = cty.StringVal(err.Error())
+	} else {
+		runFields["err"] = cty.StringVal("")
+	}
+	runVal := cty.ObjectVal(runFields)
+	jobCtx.Variables["run"] = runVal
+
+	return res, err
+}
+
+func (app *App) ctyToGo(v cty.Value) (interface{}, error) {
+	var vv interface{}
+	switch v.Type() {
+	case cty.String:
+		var vvv string
+		if err := gocty.FromCtyValue(v, &vvv); err != nil {
+			return nil, err
+		}
+		vv = vvv
+	case cty.Number:
+		var vvv int
+		if err := gocty.FromCtyValue(v, &vvv); err != nil {
+			return nil, err
+		}
+		vv = vvv
+	case cty.Bool:
+		var vvv bool
+		if err := gocty.FromCtyValue(v, &vvv); err != nil {
+			return nil, err
+		}
+		vv = vvv
+	default:
+		return nil, fmt.Errorf("handler for type %s not implemneted yet", v.Type().FriendlyName())
+	}
+
+	return vv, nil
+}
+
+func (app *App) execJobSteps(jobCtx *hcl2.EvalContext, stepResults map[string]cty.Value, steps []Step) (*Result, error) {
+	// TODO Sort steps by name and needs
+
+	// TODO Clone this to avoid mutation
+	stepCtx := jobCtx
+
+	var lastRes *Result
+	for _, s := range steps {
+		var err error
+		lastRes, err = app.execRun(stepCtx, s.Run)
+		if err != nil {
+			return lastRes, err
+		}
+		stepResults[s.Name] = lastRes.toCty()
+		stepResultsVal := cty.ObjectVal(stepResults)
+		stepCtx.Variables["step"] = stepResultsVal
+	}
+	return lastRes, nil
+}
+
+func createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interface{}, givenOpts map[string]interface{}) (*hcl2.EvalContext, error) {
 	params := map[string]cty.Value{}
 	paramSpecs := append(append([]ParameterSpec{}, cc.Parameters...), j.Parameters...)
 	for _, p := range paramSpecs {
@@ -596,22 +727,4 @@ func createJobRunContext(cc *HCL2Config, j JobSpec, givenParams map[string]inter
 	}
 
 	return ctx, nil
-}
-
-func createRuns(ctx *hcl2.EvalContext, body hcl2.Body) (*DeferredRuns, error) {
-	deferredRuns := &DeferredRuns{}
-
-	expandedBody := dynblock.Expand(body, ctx)
-
-	diags := gohcl2.DecodeBody(expandedBody, ctx, deferredRuns)
-	if diags.HasErrors() {
-		// We return the diags as an implementation of error, which the
-		// caller than then type-assert if desired to recover the individual
-		// diagnostics.
-		// FIXME: The current API gives us no way to return warnings in the
-		// absence of any errors.
-		return deferredRuns, diags
-	}
-
-	return deferredRuns, nil
 }

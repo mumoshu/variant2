@@ -1,3 +1,6 @@
 #!/usr/bin/env bash
 
-VARIANT_NAME=$0 VARIANT_DIR=$(dirname $0) variant2 $@
+export VARIANT_NAME=$(basename $0)
+export VARIANT_DIR=$(dirname $0)
+
+exec variant2 $@
