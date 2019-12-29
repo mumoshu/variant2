@@ -10,62 +10,81 @@ import (
 
 func TestExamples(t *testing.T) {
 	testcases := []struct {
-		args      []string
-		cmd       string
-		dir       string
-		expectErr string
-		expectOut string
+		args        []string
+		variantName string
+		variantDir  string
+		wd          string
+		expectErr   string
+		expectOut   string
 	}{
 		{
-			cmd:  "complex",
-			args: []string{"complex", "main", "--opt1", "OPT1"},
-			dir:  "./examples/complex",
+			variantName: "complex",
+			args:        []string{"variant", "main", "--opt1", "OPT1"},
+			variantDir:  "./examples/complex",
 		},
 		{
-			cmd:       "simple",
-			args:      []string{"simple", "--opt1", "OPT1"},
-			dir:       "./examples/simple",
-			expectErr: "unknown flag: --opt1",
+			variantName: "simple",
+			args:        []string{"variant", "--opt1", "OPT1"},
+			variantDir:  "./examples/simple",
+			expectErr:   "unknown flag: --opt1",
 		},
 		{
-			cmd: "simple",
-			// TODO this should fail. Impelemnt shell runner
-			args: []string{"simple", "app", "deploy", "--namespace", "ns1"},
-			dir:  "./examples/simple",
-			expectErr: "command \"bash -c     kubectl -n ns1 apply -f examples/simple/manifests/\n\": exit status 1",
+			variantName: "simple",
+			args:       []string{"variant", "app", "deploy", "--namespace", "ns1"},
+			variantDir: "./examples/simple",
+			expectErr:  "command \"bash -c     kubectl -n ns1 apply -f examples/simple/manifests/\n\": exit status 1",
 		},
 		{
-			cmd:  "simple",
-			args: []string{"simple", "app", "deploy", "--namespace", "default"},
-			dir:  "./examples/simple",
+			variantName: "simple",
+			args:        []string{"variant", "app", "deploy", "--namespace", "default"},
+			variantDir:  "./examples/simple",
 		},
 		{
-			cmd:  "",
-			args: []string{"variant", "test"},
-			dir:  "./examples/simple",
+			args:       []string{"variant", "run", "app", "deploy", "--namespace", "ns1"},
+			variantDir: "./examples/simple",
+			expectErr:  "command \"bash -c     kubectl -n ns1 apply -f examples/simple/manifests/\n\": exit status 1",
 		},
 		{
-			cmd:  "kubectl",
-			args: []string{"kubectl", "apply", "--namespace", "default", "-f", "examples/simple/manifests/"},
-			dir:  "./examples/simple/mocks/kubectl",
+			args:        []string{"variant", "run", "app", "deploy", "--namespace", "default"},
+			variantDir:  "./examples/simple",
 		},
 		{
-			cmd:       "rubyrunner",
-			args:      []string{"rubyrunner", "test1"},
-			dir:       "./examples/rubyrunner",
-			expectOut: "TEST\n",
+			variantName: "",
+			args:        []string{"variant", "test"},
+			variantDir:  "./examples/simple",
 		},
 		{
-			cmd:       "rubyrunner",
-			args:      []string{"rubyrunner", "test2"},
-			dir:       "./examples/rubyrunner",
-			expectOut: "TEST\n",
+			variantName: "",
+			args:        []string{"variant", "test"},
+			wd:          "./examples/simple",
 		},
 		{
-			cmd:       "rubyrunner",
-			args:      []string{"rubyrunner", "test3"},
-			dir:       "./examples/rubyrunner",
-			expectOut: "TEST\n",
+			variantName: "",
+			args:        []string{"variant", "test"},
+			wd:          "./examples/config",
+		},
+		{
+			variantName: "kubectl",
+			args:        []string{"variant", "apply", "--namespace", "default", "-f", "examples/simple/manifests/"},
+			variantDir:  "./examples/simple/mocks/kubectl",
+		},
+		{
+			variantName: "rubyrunner",
+			args:        []string{"variant", "test1"},
+			variantDir:  "./examples/rubyrunner",
+			expectOut:   "TEST\n",
+		},
+		{
+			variantName: "rubyrunner",
+			args:        []string{"variant", "test2"},
+			variantDir:  "./examples/rubyrunner",
+			expectOut:   "TEST\n",
+		},
+		{
+			variantName: "rubyrunner",
+			args:        []string{"variant", "test3"},
+			variantDir:  "./examples/rubyrunner",
+			expectOut:   "TEST\n",
 		},
 	}
 
@@ -80,12 +99,18 @@ func TestExamples(t *testing.T) {
 				Getenv: func(name string) string {
 					switch name {
 					case "VARIANT_NAME":
-						return tc.cmd
+						return tc.variantName
 					case "VARIANT_DIR":
-						return tc.dir
+						return tc.variantDir
 					default:
 						panic(fmt.Sprintf("Unexpected call to getenv %q", name))
 					}
+				},
+				Getwd: func() (string, error) {
+					if tc.wd != "" {
+						return tc.wd, nil
+					}
+					return "", fmt.Errorf("Unexpected call to getw")
 				},
 			}
 			var err error

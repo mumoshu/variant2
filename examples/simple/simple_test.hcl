@@ -1,5 +1,10 @@
 // test for `job "app deploy"`
 test "app deploy" {
+  variable "path" {
+    type = string
+    value = ".:/bin:/usr/bin:${abspath("${context.sourcedir}/mocks/kubectl")}"
+  }
+
   case "ng1" {
     namespace = "foo"
     exitstatus = 1
@@ -7,7 +12,7 @@ test "app deploy" {
 command "bash -c     kubectl -n foo apply -f examples/simple/manifests/
 ": exit status 1
 EOS
-)
+    )
   }
 
   case "ok1" {
@@ -18,6 +23,7 @@ EOS
 
   run "app deploy" {
     namespace = case.namespace
+    path = var.path
   }
 
   assert "error" {

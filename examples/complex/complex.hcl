@@ -1,12 +1,5 @@
 description = "desc for default"
 
-config {
-  files = [
-    "foo.yaml"]
-  // contexts = ["prod", "cluster1"]
-  // directories = ["config"]
-}
-
 parameter def1 {
   description = "defa1"
   type = string
@@ -19,16 +12,17 @@ parameter param1 {
   default = "aa"
 }
 
-
 variable lis {
-  type = list(string)
+//  type = list(string)
+  type = tuple([string,string])
   value = [
     "a",
     "b"]
 }
 
 variable mm {
-  type = map(string)
+//  type = map(string)
+  type = object({foo=string})
   value = {
     foo = "bar"
   }

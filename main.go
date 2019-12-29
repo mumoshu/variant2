@@ -18,6 +18,7 @@ type Main struct {
 	Stdout, Stderr io.Writer
 	Args           []string
 	Getenv         func(string) string
+	Getwd          func() (string, error)
 }
 
 func main() {
@@ -26,6 +27,7 @@ func main() {
 		Stderr: os.Stderr,
 		Args:   os.Args,
 		Getenv: os.Getenv,
+		Getwd: os.Getwd,
 	}
 	err := m.Run()
 	if err != nil {
@@ -42,7 +44,8 @@ type Config struct {
 func configureCommand(cli *cobra.Command, root app.JobSpec) (*Config, error) {
 	options := map[string]interface{}{}
 	optionFeeds := map[string]func() interface{}{}
-	for _, o := range root.Options {
+	for i := range root.Options {
+		o := root.Options[i]
 		var tpe cty.Type
 		tpe, diags := typeexpr.TypeConstraint(o.Type)
 		if diags != nil {
@@ -62,7 +65,12 @@ func configureCommand(cli *cobra.Command, root app.JobSpec) (*Config, error) {
 			}
 			options[o.Name] = &v
 			optionFeeds[o.Name] = func() interface{} {
-				return v
+				// This avoids setting "" when the flag is actually missing, so that
+				// we can differentiate between when (1)an empty string is specified vs (2)no flag is provided.
+				if cli.PersistentFlags().Lookup(o.Name).Changed {
+					return v
+				}
+				return nil
 			}
 		case cty.Bool:
 			var v bool
@@ -73,6 +81,11 @@ func configureCommand(cli *cobra.Command, root app.JobSpec) (*Config, error) {
 			}
 			options[o.Name] = &v
 			optionFeeds[o.Name] = func() interface{} {
+				// This avoids setting "" when the flag is actually missing, so that
+				// we can differentiate between when (1)an empty string is specified vs (2)no flag is provided.
+				if cli.PersistentFlags().Lookup(o.Name).Changed {
+					return v
+				}
 				return v
 			}
 		}
@@ -256,7 +269,7 @@ func (m Main) Run() error {
 
 	if dir == "" {
 		var err error
-		dir, err = os.Getwd()
+		dir, err = m.Getwd()
 		if err != nil {
 			return err
 		}
@@ -284,21 +297,16 @@ func (m Main) Run() error {
 	rootCmd := &cobra.Command{
 		Use: "variant",
 	}
-	runCmd := &cobra.Command{
-		Use: "run [JOB NAME] [PARAMS] [OPTIONS]",
-		Short: "Run a job",
-	}
 	testCmd := &cobra.Command{
-		Use: "test [NAME]",
+		Use:   "test [NAME]",
 		Short: "Run test(s)",
 		RunE: func(c *cobra.Command, args []string) error {
 			_, err := ap.RunTests()
 			return err
 		},
 	}
-	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(runRootCmd)
 	rootCmd.AddCommand(testCmd)
-	runCmd.AddCommand(runRootCmd)
 	rootCmd.SetArgs(m.Args[1:])
 	return rootCmd.Execute()
 }

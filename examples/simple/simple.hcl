@@ -24,10 +24,18 @@ job "shell" {
 }
 
 job "app deploy" {
+  option "path" {
+    type = string
+    default = ".:/bin:/usr/bin:${abspath("${context.sourcedir}/mocks/kubectl")}"
+  }
   run "shell" {
     script = <<EOS
     kubectl -n ${opt.namespace} apply -f ${context.sourcedir}/manifests/
 EOS
-    path = ".:/bin:/usr/bin:${abspath("${context.sourcedir}/mocks/kubectl")}"
+    path = opt.path
+  }
+
+  assert "path" {
+    condition = opt.path != ""
   }
 }
