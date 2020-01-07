@@ -32,7 +32,5 @@ job "test2" {
 }
 
 job "test3" {
-  run "test1" {
-
-  }
+  run "test1" {}
 }
