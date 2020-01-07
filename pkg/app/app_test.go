@@ -1,11 +1,14 @@
 package app
 
 import (
+	"os"
 	"testing"
 )
 
 func TestExampleComplex(t *testing.T) {
 	app, err := New("../../examples/complex")
+	app.Stdout = os.Stdout
+	app.Stderr = os.Stderr
 
 	if err != nil {
 		app.ExitWithError(err)

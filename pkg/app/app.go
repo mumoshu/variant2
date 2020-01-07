@@ -404,8 +404,6 @@ func (app *App) execJob(j JobSpec, ctx *hcl2.EvalContext) (*Result, error) {
 			}
 		}
 		return &Result{}, nil
-	} else {
-		return nil, fmt.Errorf("invalid job %q: want at least one of `exec`, `run`, or `assert`, but got none", j.Name)
 	}
 
 	if j.Assert != nil && len(j.Assert) > 0 {
@@ -417,8 +415,9 @@ func (app *App) execJob(j JobSpec, ctx *hcl2.EvalContext) (*Result, error) {
 	}
 
 	if res == nil && err == nil {
-		panic("[bug] res and err should not be nil at the same time")
+		res = &Result{}
 	}
+
 	return res, err
 }
 
