@@ -1,13 +1,16 @@
 package app
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
+	"testing"
 
 	hcl2 "github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
@@ -466,32 +469,78 @@ func (app *App) execAssert(ctx *hcl2.EvalContext, a Assert) error {
 	return nil
 }
 
-func (app *App) RunTests() (*Result, error) {
+// No one should be using func Main anymore.
+// See the doc comment on func Main and use MainStart instead.
+var errMain = errors.New("testing: unexpected use of func Main")
+
+type matchStringOnly func(pat, str string) (bool, error)
+
+func (f matchStringOnly) MatchString(pat, str string) (bool, error)   {
+	return f(pat, str)
+}
+func (f matchStringOnly) StartCPUProfile(w io.Writer) error           { return errMain }
+func (f matchStringOnly) StopCPUProfile()                             {}
+func (f matchStringOnly) WriteProfileTo(string, io.Writer, int) error { return errMain }
+func (f matchStringOnly) ImportPath() string                          { return "" }
+func (f matchStringOnly) StartTestLog(io.Writer)                      {}
+func (f matchStringOnly) StopTestLog() error                          { return errMain }
+
+func failOnPanic(t *testing.T) {
+	r := recover()
+	if r != nil {
+		t.Errorf("test panicked: %v\n%s", r, debug.Stack())
+		t.FailNow()
+	}
+}
+func (app *App) RunTests(prefix string) (*Result, error) {
 	var res *Result
-	var err error
-	for _, t := range app.Config.Tests {
-		res, err = app.execTest(t)
-		if err != nil {
-			return nil, err
+	var suite []testing.InternalTest
+	for i := range app.Config.Tests {
+		test := app.Config.Tests[i]
+		suite = append(suite, testing.InternalTest{
+			Name: test.Name,
+			F: func(t *testing.T) {
+				defer failOnPanic(t)
+				var err error
+				res, err = app.execTest(t, test)
+				if err != nil {
+					t.Fatalf("%v", err)
+				}
+			},
+		})
+	}
+	matchAll := func(pat, str string) (bool, error) {
+		if prefix != "" {
+			return strings.HasPrefix(str, prefix), nil
 		}
+		return true, nil
+	}
+	main := testing.MainStart(matchStringOnly(matchAll), suite, nil, nil)
+	flag.Set("test.run", prefix)
+	code := main.Run()
+	if code != 0 {
+		return nil, fmt.Errorf("test exited with code %d", code)
 	}
 	return res, nil
 }
 
-func (app *App) execTest(t Test) (*Result, error) {
+func (app *App) execTest(t *testing.T, test Test) (*Result, error) {
 	var cases []Case
-	if len(t.Cases) == 0 {
+	if len(test.Cases) == 0 {
 		cases = []Case{Case{}}
 	} else {
-		cases = t.Cases
+		cases = test.Cases
 	}
 	var res *Result
-	var err error
-	for _, c := range cases {
-		res, err = app.execTestCase(t, c)
-		if err != nil {
-			return nil, err
-		}
+	for i := range cases {
+		c := cases[i]
+		t.Run(c.Name, func(t *testing.T) {
+			var err error
+			res, err = app.execTestCase(test, c)
+			if err != nil {
+				t.Fatalf("%v", err)
+			}
+		})
 	}
 	return res, nil
 }

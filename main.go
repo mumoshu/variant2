@@ -300,8 +300,16 @@ func (m Main) Run() error {
 	testCmd := &cobra.Command{
 		Use:   "test [NAME]",
 		Short: "Run test(s)",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
-			_, err := ap.RunTests()
+			var prefix string
+			if len(args) > 0 {
+				prefix = args[0]
+			}
+			_, err := ap.RunTests(prefix)
+			if err != nil {
+				c.SilenceUsage = true
+			}
 			return err
 		},
 	}
