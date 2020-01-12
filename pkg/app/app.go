@@ -155,7 +155,7 @@ type JobSpec struct {
 	Secrets     []Config     `hcl:"secret,block"`
 	Variables   []Variable   `hcl:"variable,block"`
 
-	Concurrency *int `hcl:"concurrency,attr"`
+	Concurrency hcl2.Expression `hcl:"concurrency,attr"`
 
 	SourceLocator hcl2.Expression `hcl:"__source_locator,attr"`
 
@@ -312,7 +312,18 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 	jobCtx.Variables["sec"] = sec
 
 	needs := map[string]cty.Value{}
-	res, err := app.execJobSteps(jobCtx, needs, j.Steps)
+	var concurrency int
+	if !IsExpressionEmpty(j.Concurrency) {
+		if err := gohcl2.DecodeExpression(j.Concurrency, jobCtx, &concurrency); err != nil {
+			return nil, err
+		}
+		if concurrency < 1 {
+			return nil, fmt.Errorf("concurrency less than 1 can not be set. If you wanted %d for a concurrency equals to the number of steps, is isn't a good idea. Some system has a relatively lower fd limit that can make your command fail only when there are too many steps. Always use static number of concurrency", concurrency)
+		}
+	} else {
+		concurrency = 1
+	}
+	res, err := app.execJobSteps(jobCtx, needs, j.Steps, concurrency)
 	if res != nil || err != nil {
 		return res, err
 	}
@@ -688,7 +699,7 @@ func (app *App) ctyToGo(v cty.Value) (interface{}, error) {
 	return vv, nil
 }
 
-func (app *App) execJobSteps(jobCtx *hcl2.EvalContext, results map[string]cty.Value, steps []Step) (*Result, error) {
+func (app *App) execJobSteps(jobCtx *hcl2.EvalContext, results map[string]cty.Value, steps []Step, concurrency int) (*Result, error) {
 	// TODO Sort steps by name and needs
 
 	// TODO Clone this to avoid mutation
@@ -759,24 +770,37 @@ func (app *App) execJobSteps(jobCtx *hcl2.EvalContext, results map[string]cty.Va
 
 		var wg sync.WaitGroup
 		type result struct {
-			r *Result
+			r   *Result
 			err error
 		}
 		rs := make([]result, len(ids))
 		var rsm sync.Mutex
+
+		workqueue := make(chan func())
+
+		for c := 0; c < concurrency; c++ {
+			go func() {
+				for w := range workqueue {
+					w()
+				}
+			}()
+		}
+
 		for i, _ := range ids {
 			id := ids[i]
 
 			f := idToF[id]
 
+			ii := i
+
 			wg.Add(1)
-			go func(i int) {
+			workqueue <- func() {
 				defer wg.Done()
 				r, err := f()
 				rsm.Lock()
-				rs[i] = result{r: r, err: err}
+				rs[ii] = result{r: r, err: err}
 				rsm.Unlock()
-			}(i)
+			}
 		}
 		wg.Wait()
 
@@ -1087,4 +1111,8 @@ func getVarialbles(varCtx *hcl2.EvalContext, varSpecs []Variable) (cty.Value, er
 		}
 	}
 	return cty.ObjectVal(varFields), nil
+}
+
+func IsExpressionEmpty(ex hcl2.Expression) bool {
+	return ex.Range().Start == ex.Range().End
 }

@@ -27,6 +27,12 @@ job "test" {
     type = number
   }
 
+  option "concurrency" {
+    type = number
+  }
+
+  concurrency = opt.concurrency
+
   step "one" {
     run "one" {
       delay = opt.delayone
