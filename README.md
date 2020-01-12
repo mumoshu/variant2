@@ -156,7 +156,7 @@ job "deploy" {
 ```
 
 Now, running `variant run deploy` deploys fluend and prometheus concurrently.
-Once finished, I deploys your app, as you've declared so in the `needs` attribute of the `run "deploy apps" {}` block.
+Once finished, it deploys your app, as you've declared so in the `needs` attribute of the `run "deploy apps" {}` block.
 
 ## Configuration Language
 
