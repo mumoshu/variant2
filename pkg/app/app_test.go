@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
@@ -18,6 +19,7 @@ func TestExampleComplex(t *testing.T) {
 		cmd  string
 		args map[string]interface{}
 		opts map[string]interface{}
+		err  string
 	}{
 		{
 			cmd: "",
@@ -27,6 +29,7 @@ func TestExampleComplex(t *testing.T) {
 			opts: map[string]interface{}{
 				"opt1": "opt1",
 			},
+			err: "nothing to run",
 		},
 		{
 			cmd: "cmd1",
@@ -52,13 +55,24 @@ func TestExampleComplex(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testcases {
-		cmd := tc.cmd
-		args := tc.args
-		opts := tc.opts
+	for i := range testcases {
+		tc := testcases[i]
 
-		if _, err := app.Run(cmd, args, opts); err != nil {
-			app.ExitWithError(err)
-		}
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			cmd := tc.cmd
+			args := tc.args
+			opts := tc.opts
+
+			_, err := app.Run(cmd, args, opts)
+			if err != nil {
+				if tc.err == "" {
+					t.Errorf("unexpected error: %v", err)
+				} else if tc.err != err.Error() {
+					t.Errorf("unexpected error: want %q, got %q", tc.err, err.Error())
+				}
+			} else if tc.err != "" {
+				t.Errorf("expected error did not occur: want %q, got none", tc.err)
+			}
+		})
 	}
 }

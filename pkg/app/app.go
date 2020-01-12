@@ -483,22 +483,6 @@ func (app *App) execAssert(ctx *hcl2.EvalContext, a Assert) error {
 	return nil
 }
 
-// No one should be using func Main anymore.
-// See the doc comment on func Main and use MainStart instead.
-var errMain = errors.New("testing: unexpected use of func Main")
-
-type matchStringOnly func(pat, str string) (bool, error)
-
-func (f matchStringOnly) MatchString(pat, str string) (bool, error) {
-	return f(pat, str)
-}
-func (f matchStringOnly) StartCPUProfile(w io.Writer) error           { return errMain }
-func (f matchStringOnly) StopCPUProfile()                             {}
-func (f matchStringOnly) WriteProfileTo(string, io.Writer, int) error { return errMain }
-func (f matchStringOnly) ImportPath() string                          { return "" }
-func (f matchStringOnly) StartTestLog(io.Writer)                      {}
-func (f matchStringOnly) StopTestLog() error                          { return errMain }
-
 func failOnPanic(t *testing.T) {
 	r := recover()
 	if r != nil {
@@ -506,13 +490,13 @@ func failOnPanic(t *testing.T) {
 		t.FailNow()
 	}
 }
-func (app *App) RunTests(prefix string) (*Result, error) {
+func (app *App) RunTests(pat string) (*Result, error) {
 	var res *Result
 	var suite []testing.InternalTest
 	for i := range app.Config.Tests {
 		test := app.Config.Tests[i]
 		suite = append(suite, testing.InternalTest{
-			Name: test.Name,
+			Name: rewrite(test.Name),
 			F: func(t *testing.T) {
 				defer failOnPanic(t)
 				var err error
@@ -523,14 +507,11 @@ func (app *App) RunTests(prefix string) (*Result, error) {
 			},
 		})
 	}
-	matchAll := func(pat, str string) (bool, error) {
-		if prefix != "" {
-			return strings.HasPrefix(str, prefix), nil
-		}
-		return true, nil
-	}
-	main := testing.MainStart(matchStringOnly(matchAll), suite, nil, nil)
-	flag.Set("test.run", prefix)
+	main := testing.MainStart(TestDeps{}, suite, nil, nil)
+	flag.Set("test.run", rewrite(pat))
+	// Avoid error like this:
+	//   testing: can't write /var/folders/lx/53d8_kgd26vf5_drrg89wkvc0000gp/T/go-build584494014/b001/testlog.txt: close /var/folders/lx/53d8_kgd26vf5_drrg89wkvc0000gp/T/go-build584494014/b001/testlog.txt: file already closed
+	flag.Set("test.testlogfile", "")
 	code := main.Run()
 	if code != 0 {
 		return nil, fmt.Errorf("test exited with code %d", code)
