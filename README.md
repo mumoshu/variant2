@@ -175,6 +175,10 @@ In addition to everything available via the [native HCL syntax](https://github.c
 - Runs
 - Steps
 
+To learn more, see [examples](https://github.com/mumoshu/variant2/tree/master/examples) for working examples covering all these `blocks`.
+
+Optionally read the following for overviews on each type of block.
+
 ## Job
 
 Do only one thing in each "job"
