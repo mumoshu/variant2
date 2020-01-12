@@ -93,6 +93,15 @@ As you've seen in the help output, `variant run deploy` runs the `deploy` job, w
 $ variant run deploy
 ```
 
+# Features
+
+- Terraform-like strongly-typed DSL on top of HCL to define your command (See `Configuration Language` below)
+- Deep-merging YAML configuration files
+- Deep-merging secret values from Vault, AWS SecretsManager, SOPS, etc. powered by [vals](https://github.com/variantdev/vals)
+- Test framework with `go test`-compatible test runner
+- Easy embedding in any Golang application
+- Build a single-executable of your command with Golang
+
 # Configuration Language
 
 Variant uses its own configuration language based on [the HashiCorp configuration language 2](https://github.com/hashicorp/hcl).
