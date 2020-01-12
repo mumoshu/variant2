@@ -9,9 +9,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/hashicorp/go-multierror"
 	hcl2 "github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	gohcl2 "github.com/hashicorp/hcl/v2/gohcl"
@@ -19,6 +22,7 @@ import (
 	"github.com/imdario/mergo"
 	"github.com/mumoshu/hcl2test/pkg/conf"
 	"github.com/pkg/errors"
+	"github.com/variantdev/dag/pkg/dag"
 	"github.com/variantdev/mod/pkg/shell"
 	"github.com/variantdev/vals"
 	ctyyaml "github.com/zclconf/go-cty-yaml"
@@ -160,7 +164,7 @@ type JobSpec struct {
 	Fail   hcl2.Expression `hcl:"fail,attr"`
 	Run    *RunJob         `hcl:"run,block"`
 
-	Steps []Step `hcl:"step,block"'`
+	Steps []Step `hcl:"step,block"`
 }
 
 type Assert struct {
@@ -417,7 +421,7 @@ func (app *App) execJob(j JobSpec, ctx *hcl2.EvalContext) (*Result, error) {
 
 		res, err = app.execCmd(cmd, args, env, true)
 	} else if j.Run != nil {
-		res, err = app.execRun(ctx, j.Run)
+		res, err = app.execRun(ctx, j.Run, new(sync.Mutex))
 	} else if j.Assert != nil {
 		for _, a := range j.Assert {
 			if err2 := app.execAssert(ctx, a); err2 != nil {
@@ -533,6 +537,7 @@ func (app *App) execTest(t *testing.T, test Test) (*Result, error) {
 			var err error
 			res, err = app.execTestCase(test, c)
 			if err != nil {
+				app.PrintError(err)
 				t.Fatalf("%v", err)
 			}
 		})
@@ -566,7 +571,11 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 	caseVal := cty.ObjectVal(caseFields)
 	ctx.Variables["case"] = caseVal
 
-	res, err := app.execRun(ctx, &t.Run)
+	res, err := app.execRun(ctx, &t.Run, new(sync.Mutex))
+
+	if res == nil && err != nil {
+		return nil, err
+	}
 
 	// If there are one ore more assert(s), do not fail immediately and let the assertion(s) decide
 	if t.Assert != nil && len(t.Assert) > 0 {
@@ -611,7 +620,7 @@ func (res *Result) toCty() cty.Value {
 	})
 }
 
-func (app *App) execRun(jobCtx *hcl2.EvalContext, run *RunJob) (*Result, error) {
+func (app *App) execRunInternal(jobCtx *hcl2.EvalContext, run *RunJob) (*Result, error) {
 	args := map[string]interface{}{}
 	for k := range run.Args {
 		var v cty.Value
@@ -625,8 +634,18 @@ func (app *App) execRun(jobCtx *hcl2.EvalContext, run *RunJob) (*Result, error) 
 		args[k] = vv
 	}
 
-	var err error
-	res, err := app.Run(run.Name, args, args)
+	return app.Run(run.Name, args, args)
+}
+
+func (app *App) execRun(jobCtx *hcl2.EvalContext, run *RunJob, m *sync.Mutex) (*Result, error) {
+	res, err := app.execRunInternal(jobCtx, run)
+
+	if res == nil {
+		res = &Result{ExitStatus: 1, Stderr: err.Error()}
+	}
+
+	m.Lock()
+	defer m.Unlock()
 
 	runFields := map[string]cty.Value{}
 	runFields["res"] = res.toCty()
@@ -669,23 +688,111 @@ func (app *App) ctyToGo(v cty.Value) (interface{}, error) {
 	return vv, nil
 }
 
-func (app *App) execJobSteps(jobCtx *hcl2.EvalContext, stepResults map[string]cty.Value, steps []Step) (*Result, error) {
+func (app *App) execJobSteps(jobCtx *hcl2.EvalContext, results map[string]cty.Value, steps []Step) (*Result, error) {
 	// TODO Sort steps by name and needs
 
 	// TODO Clone this to avoid mutation
-	stepCtx := jobCtx
+	hclCtx := jobCtx
+
+	m := new(sync.Mutex)
+
+	idToF := map[string]func() (*Result, error){}
+
+	var dagNodeIds []string
+	dagNodeIdToDeps := map[string][]string{}
+	dagNodeIdToIndex := map[string]int{}
 
 	var lastRes *Result
-	for _, s := range steps {
-		var err error
-		lastRes, err = app.execRun(stepCtx, s.Run)
-		if err != nil {
-			return lastRes, err
+	for i := range steps {
+		s := steps[i]
+
+		f := func() (*Result, error) {
+			var err error
+			res, err := app.execRun(hclCtx, s.Run, m)
+			if err != nil {
+				return res, err
+			}
+
+			m.Lock()
+
+			results[s.Name] = res.toCty()
+			resultsCty := cty.ObjectVal(results)
+			hclCtx.Variables["step"] = resultsCty
+
+			m.Unlock()
+
+			return res, nil
 		}
-		stepResults[s.Name] = lastRes.toCty()
-		stepResultsVal := cty.ObjectVal(stepResults)
-		stepCtx.Variables["step"] = stepResultsVal
+
+		idToF[s.Name] = f
+
+		dagNodeIdToIndex[s.Name] = i
+
+		dagNodeIds = append(dagNodeIds, s.Name)
+
+		if s.Needs != nil {
+			dagNodeIdToDeps[s.Name] = *s.Needs
+		} else {
+			dagNodeIdToDeps[s.Name] = []string{}
+		}
 	}
+
+	g := dag.New(dag.Nodes(dagNodeIds))
+	for id, deps := range dagNodeIdToDeps {
+		g.AddDependencies(id, deps)
+	}
+
+	plan, err := g.Plan()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, nodes := range plan {
+		ids := []string{}
+		for _, n := range nodes {
+			ids = append(ids, n.Id)
+		}
+		// Preserve the order of definitions
+		sort.Slice(ids, func(i, j int) bool {
+			return dagNodeIdToIndex[ids[i]] < dagNodeIdToIndex[ids[j]]
+		})
+
+		var wg sync.WaitGroup
+		type result struct {
+			r *Result
+			err error
+		}
+		rs := make([]result, len(ids))
+		var rsm sync.Mutex
+		for i, _ := range ids {
+			id := ids[i]
+
+			f := idToF[id]
+
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				r, err := f()
+				rsm.Lock()
+				rs[i] = result{r: r, err: err}
+				rsm.Unlock()
+			}(i)
+		}
+		wg.Wait()
+
+		lastRes = rs[len(rs)-1].r
+
+		var rese *multierror.Error
+		for i := range rs {
+			if rs[i].err != nil {
+				rese = multierror.Append(rese, err)
+			}
+		}
+		if rese != nil && rese.Len() > 0 {
+			return lastRes, rese
+		}
+	}
+
 	return lastRes, nil
 }
 

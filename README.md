@@ -95,14 +95,70 @@ $ variant run deploy
 
 # Features
 
-- Terraform-like strongly-typed DSL on top of HCL to define your command (See `Configuration Language` below)
+- Terraform-like strongly-typed DSL on top of HCL to define your command. See `Configuration Language` below
+- Embedded workflow engine with concurrency. See `Concurrency` below
 - Deep-merging YAML configuration files
 - Deep-merging secret values from Vault, AWS SecretsManager, SOPS, etc. powered by [vals](https://github.com/variantdev/vals)
 - Test framework with `go test`-compatible test runner
 - Easy embedding in any Golang application
 - Build a single-executable of your command with Golang
 
-# Configuration Language
+## Concurrency
+
+The example in the `Getting Started` guide can be modified by adding `needs` to build a DAG of steps and `concurrency` for setting the desired number of concurrency:
+
+BEFORE:
+
+```hcl
+job "deploy" {
+  step "deploy infra" {
+    run "helm" {
+      release = "app1"
+      chart = "app1"
+    }
+  }
+
+  step "deploy apps" {
+    run "kubectl" {
+      dir = "deploy/environments/${opt.env}/manifests"
+    }
+  }
+}
+```
+
+AFTER:
+
+```hcl
+job "deploy" {
+  concurrency = 2
+
+  step "deploy fluentd" {
+    run "helm" {
+      release = "fluentd"
+      chart = "fluentd"
+    }
+  }
+
+  step "deploy prometheus" {
+    run "helm" {
+      release = "prometheus"
+      chart = "prometheus"
+    }
+  }
+
+  step "deploy apps" {
+    run "kubectl" {
+      dir = "deploy/environments/${opt.env}/manifests"
+    }
+    needs = ["deploy fluentd", "deploy prometheus"]
+  }
+}
+```
+
+Now, running `variant run deploy` deploys fluend and prometheus concurrently.
+Once finished, I deploys your app, as you've declared so in the `needs` attribute of the `run "deploy apps" {}` block.
+
+## Configuration Language
 
 Variant uses its own configuration language based on [the HashiCorp configuration language 2](https://github.com/hashicorp/hcl).
 

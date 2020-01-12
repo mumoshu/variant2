@@ -72,6 +72,12 @@ func TestExamples(t *testing.T) {
 			wd:          "./examples/secret",
 		},
 		{
+			subject:     "concurrency",
+			variantName: "",
+			args:        []string{"variant", "test"},
+			wd:          "./examples/concurrency",
+		},
+		{
 			variantName: "kubectl",
 			args:        []string{"variant", "apply", "--namespace", "default", "-f", "examples/simple/manifests/"},
 			variantDir:  "./examples/simple/mocks/kubectl",

@@ -837,6 +837,8 @@ github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyC
 github.com/valyala/fasthttp v1.2.0/go.mod h1:4vX61m6KN+xDduDNwXrhIAVZaZaZiQ1luJk8LWSxF3s=
 github.com/valyala/quicktemplate v1.1.1/go.mod h1:EH+4AkTd43SvgIbQHYu59/cJyxDoOVRUAfrukLPuGJ4=
 github.com/valyala/tcplisten v0.0.0-20161114210144-ceec8f93295a/go.mod h1:v3UYOV9WzVtRmSR+PDvWpU/qWl4Wa5LApYYX4ZtKbio=
+github.com/variantdev/dag v0.0.0-20191028002400-bb0b3c785363 h1:KrfQBEUn+wEOQ/6UIfoqRDvn+Q/wZridQ7t0G1vQqKE=
+github.com/variantdev/dag v0.0.0-20191028002400-bb0b3c785363/go.mod h1:pH1TQsNSLj2uxMo9NNl9zdGy01Wtn+/2MT96BrKmVyE=
 github.com/variantdev/mod v0.9.0 h1:vgLKex5gozq4fTPWyO+qyZlq0MjmiaE2vNbJnmho1I0=
 github.com/variantdev/mod v0.9.0/go.mod h1:KyZelxRHEZT5kOvGsopi9PNqeMXAWz4f9Rj7PNNYTMw=
 github.com/variantdev/vals v0.0.0-20191123083656-fc61ba6e8746 h1:uVcemWq1J1f3X49ZlrbQ/OkbqGvnpn6KuTfIvlP0hAY=
