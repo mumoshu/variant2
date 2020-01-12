@@ -1,3 +1,98 @@
+# Variant 2
+
+This repository contains a development branch of the second major version of [Variant](https://github.com/mumoshu/variant).
+
+See https://github.com/mumoshu/variant for more information on the first version.
+
+Once finished, this repository will eventually take over the `master` branch of the original [variant repository](https://github.com/mumoshu/variant).
+
+# Getting Started
+
+Create an `hcl` file that contains the following:
+
+```hcl
+option "namespace" {
+  description = "Namespace to interact with"
+  type = string
+  default = "default"
+  short = "n"
+}
+
+job "kubectl" {
+  parameter "dir" {
+    type = string
+  }
+
+  exec {
+    command = "kubectl"
+    args = ["-n", opt.namespace, "-f", param.dir]
+  }
+}
+
+job "helm" {
+  parameter "release" {
+    type = string
+  }
+  parameter "chart" {
+    type = string
+  }
+  option "values" {
+    type = list(string)
+  }
+
+  exec {
+    command = "helm"
+    args = ["upgrade", "--install", "-n", opt.namespace, param.release, param.chart]
+  }
+}
+
+job "deploy" {
+  step "deploy infra" {
+    run "helm" {
+      release = "app1"
+      chart = "app1"
+    }
+  }
+
+  step "deploy apps" {
+    run "kubectl" {
+      dir = "deploy/environments/${opt.env}/manifests"
+    }
+  }
+}
+```
+
+Now you can run it with `variant`:
+
+`variant run -h` will show you that all the jobs are available via sub-commands:
+
+```console
+$ variant run -h
+```
+
+```console
+Usage:
+  variant run [flags]
+  variant run [command]
+
+Available Commands:
+  deploy
+  helm
+  kubectl
+
+Flags:
+  -h, --help               help for run
+  -n, --namespace string   Namespace to interact with
+
+Use "variant run [command] --help" for more information about a command.
+```
+
+As you've seen in the help output, `variant run deploy` runs the `deploy` job, which in turn runs `kubectl` and `helm` to install your apps onto the K8s cluster:
+
+```console
+$ variant run deploy
+```
+
 # Configuration Language
 
 Variant uses its own configuration language based on [the HashiCorp configuration language 2](https://github.com/hashicorp/hcl).
@@ -30,7 +125,7 @@ This restriction ensures that you can do only one thing in each job, which makes
 
 That is, a job containing `assert` can be used as a custom assertion "function" and nothing else.
 
-A job containing one or more `step`s can be used as a workflow composed of multiple jobs. Each `step` is restricted to call a single `job`. As each `job` is easily unit testable, this ensures that you can test the workflow without dealing which each job's implementation.
+A job containing one or more `step`s can be used as a workflow composed of multiple jobs. Each `step` is restricted to call a single `job`. As each `job` is easily unit testable, this ensures that you can test the workflow without dealing with each job's implementation.
 
 # Learning materials
 
