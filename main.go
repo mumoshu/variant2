@@ -244,10 +244,7 @@ func (m *Main) initCommand(rootName string, dir string) (*app.App, *cobra.Comman
 			if err != nil {
 				return err
 			}
-			res, err := ap.Run(job.Name, params, opts)
-			if err == nil && res == nil {
-				return fmt.Errorf("Nothing to run. Printing usage.")
-			}
+			_, err = ap.Run(job.Name, params, opts)
 			cmd.SilenceUsage = true
 			return err
 		}

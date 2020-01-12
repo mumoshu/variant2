@@ -20,6 +20,7 @@ import (
 	"github.com/mumoshu/hcl2test/pkg/conf"
 	"github.com/pkg/errors"
 	"github.com/variantdev/mod/pkg/shell"
+	"github.com/variantdev/vals"
 	ctyyaml "github.com/zclconf/go-cty-yaml"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
@@ -147,6 +148,7 @@ type JobSpec struct {
 	Parameters  []Parameter  `hcl:"parameter,block"`
 	Options     []OptionSpec `hcl:"option,block"`
 	Configs     []Config     `hcl:"config,block"`
+	Secrets     []Config     `hcl:"secret,block"`
 	Variables   []Variable   `hcl:"variable,block"`
 
 	Concurrency *int `hcl:"concurrency,attr"`
@@ -287,11 +289,23 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 		return nil, err
 	}
 
-	conf, err := app.getConfigs(jobCtx, cc, j)
+	conf, err := app.getConfigs(jobCtx, cc, j, "config", func(j JobSpec) []Config { return j.Configs }, nil)
 	if err != nil {
 		return nil, err
 	}
 	jobCtx.Variables["conf"] = conf
+
+	secretRefsEvaluator, err := vals.New(vals.Options{CacheSize: 100})
+	if err != nil {
+		return nil, fmt.Errorf("Failed to initialize vals: %v", err)
+	}
+	sec, err := app.getConfigs(jobCtx, cc, j, "secret", func(j JobSpec) []Config { return j.Secrets }, func(m map[string]interface{}) (map[string]interface{}, error) {
+		return secretRefsEvaluator.Eval(m)
+	})
+	if err != nil {
+		return nil, err
+	}
+	jobCtx.Variables["sec"] = sec
 
 	needs := map[string]cty.Value{}
 	res, err := app.execJobSteps(jobCtx, needs, j.Steps)
@@ -299,7 +313,11 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 		return res, err
 	}
 
-	return app.execJob(j, jobCtx)
+	r, err := app.execJob(j, jobCtx)
+	if r == nil && err == nil {
+		return nil, fmt.Errorf("nothing to run")
+	}
+	return r, err
 }
 
 func (app *App) WriteDiags(diagnostics hcl2.Diagnostics) {
@@ -417,10 +435,6 @@ func (app *App) execJob(j JobSpec, ctx *hcl2.EvalContext) (*Result, error) {
 		}
 	}
 
-	if res == nil && err == nil {
-		res = &Result{}
-	}
-
 	return res, err
 }
 
@@ -475,7 +489,7 @@ var errMain = errors.New("testing: unexpected use of func Main")
 
 type matchStringOnly func(pat, str string) (bool, error)
 
-func (f matchStringOnly) MatchString(pat, str string) (bool, error)   {
+func (f matchStringOnly) MatchString(pat, str string) (bool, error) {
 	return f(pat, str)
 }
 func (f matchStringOnly) StartCPUProfile(w io.Writer) error           { return errMain }
@@ -829,8 +843,8 @@ func createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interfac
 	return jobCtx, nil
 }
 
-func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec) (cty.Value, error) {
-	confSpecs := append(append([]Config{}, cc.Configs...), j.Configs...)
+func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec, confType string, f func(JobSpec) []Config, g func(map[string]interface{}) (map[string]interface{}, error)) (cty.Value, error) {
+	confSpecs := append(append([]Config{}, f(cc.JobSpec)...), f(j)...)
 
 	confFields := map[string]cty.Value{}
 	for confIndex := range confSpecs {
@@ -852,7 +866,7 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec)
 				yamlData, err = ioutil.ReadFile(source.Path)
 				if err != nil {
 					if source.Default == nil {
-						return cty.NilVal, fmt.Errorf("job %q: config %q: source %d: %v", j.Name, confSpec.Name, sourceIdx, err)
+						return cty.NilVal, fmt.Errorf("job %q: %s %q: source %d: %v", j.Name, confType, confSpec.Name, sourceIdx, err)
 					}
 					yamlData = []byte(*source.Default)
 				}
@@ -909,6 +923,14 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec)
 			if err := mergo.Merge(&merged, m, mergo.WithOverride); err != nil {
 				return cty.NilVal, err
 			}
+		}
+
+		if g != nil {
+			r, err := g(merged)
+			if err != nil {
+				return cty.NilVal, err
+			}
+			merged = r
 		}
 
 		yamlData, err := yaml.Marshal(merged)

@@ -1,0 +1,65 @@
+// test for `job "app deploy"`
+test "app deploy" {
+  case "app1prod" {
+    app = "app1"
+    env = "prod"
+    exitstatus = 0
+    err = ""
+    out = trimspace(<<EOS
+{"app":"app1","env":"prod","getfoo":"app1,prod,PARAM1","v":"app1prod"}
+EOS
+    )
+  }
+
+  case "app2prod" {
+    app = "app2"
+    env = "prod"
+    exitstatus = 0
+    err = ""
+    out = trimspace(<<EOS
+{"app":"app2","env":"prod","getfoo":"app2,prod,PARAM1","v":"app2"}
+EOS
+    )
+  }
+
+  // missing env "test"
+  case "app1test" {
+    app = "app1"
+    env = "test"
+    exitstatus = 1
+    out = ""
+    err = trimspace(<<EOS
+job "secret view": secret "foo": source 1: open examples/secret/sec/test.yaml: no such file or directory
+EOS
+    )
+  }
+
+  // missing app "app3"
+  case "app3prod" {
+    app = "app3"
+    env = "prod"
+    exitstatus = 1
+    out = ""
+    err = trimspace(<<EOS
+job "secret view": secret "foo": source 2: open examples/secret/sec/app3.yaml: no such file or directory
+EOS
+    )
+  }
+
+  run "secret view" {
+    app = case.app
+    env = case.env
+  }
+
+  assert "error" {
+    condition = run.err == case.err
+  }
+
+  assert "out" {
+    condition = (run.res.set && run.res.stdout == case.out) || !run.res.set
+  }
+
+  assert "exitstatus" {
+    condition = (run.res.set && run.res.exitstatus == case.exitstatus) || !run.res.set
+  }
+}

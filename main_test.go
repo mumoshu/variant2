@@ -10,6 +10,7 @@ import (
 
 func TestExamples(t *testing.T) {
 	testcases := []struct {
+		subject     string
 		args        []string
 		variantName string
 		variantDir  string
@@ -30,9 +31,9 @@ func TestExamples(t *testing.T) {
 		},
 		{
 			variantName: "simple",
-			args:       []string{"variant", "app", "deploy", "--namespace", "ns1"},
-			variantDir: "./examples/simple",
-			expectErr:  "command \"bash -c     kubectl -n ns1 apply -f examples/simple/manifests/\n\": exit status 1",
+			args:        []string{"variant", "app", "deploy", "--namespace", "ns1"},
+			variantDir:  "./examples/simple",
+			expectErr:   "command \"bash -c     kubectl -n ns1 apply -f examples/simple/manifests/\n\": exit status 1",
 		},
 		{
 			variantName: "simple",
@@ -45,8 +46,8 @@ func TestExamples(t *testing.T) {
 			expectErr:  "command \"bash -c     kubectl -n ns1 apply -f examples/simple/manifests/\n\": exit status 1",
 		},
 		{
-			args:        []string{"variant", "run", "app", "deploy", "--namespace", "default"},
-			variantDir:  "./examples/simple",
+			args:       []string{"variant", "run", "app", "deploy", "--namespace", "default"},
+			variantDir: "./examples/simple",
 		},
 		{
 			variantName: "",
@@ -59,9 +60,16 @@ func TestExamples(t *testing.T) {
 			wd:          "./examples/simple",
 		},
 		{
+			subject:     "config",
 			variantName: "",
 			args:        []string{"variant", "test"},
 			wd:          "./examples/config",
+		},
+		{
+			subject:     "secret",
+			variantName: "",
+			args:        []string{"variant", "test"},
+			wd:          "./examples/secret",
 		},
 		{
 			variantName: "kubectl",
@@ -90,7 +98,7 @@ func TestExamples(t *testing.T) {
 
 	for i := range testcases {
 		tc := testcases[i]
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%d: %s", i, tc.subject), func(t *testing.T) {
 			outRead, outWrite := io.Pipe()
 			m := Main{
 				Stdout: outWrite,
