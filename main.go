@@ -14,6 +14,8 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+var Version string
+
 type Main struct {
 	Stdout, Stderr io.Writer
 	Args           []string
@@ -293,6 +295,7 @@ func (m Main) Run() error {
 
 	rootCmd := &cobra.Command{
 		Use: "variant",
+		Version: Version,
 	}
 	testCmd := &cobra.Command{
 		Use:   "test [NAME]",
