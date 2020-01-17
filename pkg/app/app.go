@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/variantdev/dag/pkg/dag"
 	"github.com/variantdev/mod/pkg/shell"
+	"github.com/variantdev/mod/pkg/variantmod"
 	"github.com/variantdev/vals"
 	ctyyaml "github.com/zclconf/go-cty-yaml"
 	"github.com/zclconf/go-cty/cty"
@@ -147,6 +148,8 @@ type JobSpec struct {
 	Name string `hcl:"name,label"`
 
 	Version *string `hcl:"version,attr"`
+
+	Module hcl2.Expression `hcl:"module,attr"`
 
 	Description *string      `hcl:"description,attr"`
 	Parameters  []Parameter  `hcl:"parameter,block"`
@@ -952,6 +955,13 @@ func createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interfac
 		},
 	}
 
+	mod, err := getModule(jobCtx, cc.Module, j.Module)
+	if err != nil {
+		return nil, err
+	}
+
+	jobCtx.Variables["mod"] = mod
+
 	return jobCtx, nil
 }
 
@@ -1111,6 +1121,44 @@ func getVarialbles(varCtx *hcl2.EvalContext, varSpecs []Variable) (cty.Value, er
 		}
 	}
 	return cty.ObjectVal(varFields), nil
+}
+
+func getModule(ctx *hcl2.EvalContext, m1, m2 hcl2.Expression) (cty.Value, error) {
+	var m hcl2.Expression
+
+	if m2.Range().Start != m2.Range().End {
+		m = m2
+	} else if m1.Range().Start != m1.Range().End {
+		m = m1
+	} else {
+		return cty.NilVal, nil
+	}
+
+	var moduleName string
+	if err := gohcl2.DecodeExpression(m, ctx, &moduleName); err != nil {
+		return cty.NilVal, err
+	}
+
+	fname := m.Range().Filename
+	mod, err := variantmod.New(
+		variantmod.ModuleFile(fmt.Sprintf("%s.variantmod", moduleName)),
+		variantmod.LockFile(fmt.Sprintf("%s.variantmod.lock", moduleName)),
+		variantmod.WD(filepath.Dir(fname)),
+	)
+	if err != nil {
+		return cty.NilVal, err
+	}
+
+	dirs, err := mod.ExecutableDirs()
+	if err != nil {
+		return cty.NilVal, err
+	}
+
+	pathAddition := strings.Join(dirs, ":")
+
+	return cty.MapVal(map[string]cty.Value{
+		"pathaddition": cty.StringVal(pathAddition),
+	}), nil
 }
 
 func IsExpressionEmpty(ex hcl2.Expression) bool {
