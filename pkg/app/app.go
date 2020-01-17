@@ -1149,6 +1149,11 @@ func getModule(ctx *hcl2.EvalContext, m1, m2 hcl2.Expression) (cty.Value, error)
 		return cty.NilVal, err
 	}
 
+	_, err = mod.Build()
+	if err != nil {
+		return cty.NilVal, err
+	}
+
 	dirs, err := mod.ExecutableDirs()
 	if err != nil {
 		return cty.NilVal, err

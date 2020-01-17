@@ -9,3 +9,12 @@ job "test" {
     }
   }
 }
+
+job "build" {
+  module = "default"
+
+  exec {
+    command = "sh"
+    args = ["-c", "cat ${context.sourcedir}/Dockerfile"]
+  }
+}
