@@ -110,7 +110,7 @@ As you've seen in the help output, `variant run deploy` runs the `deploy` job, w
 $ variant run deploy
 ```
 
-Head over to the [Concurrency](https://github.com/mumoshu/variant2#concurrency) section to make `kubectl` and `helm` runs concurrent so that the installation time becomes minimal.
+Head over to the [Concurrency](#concurrency) section to make `kubectl` and `helm` concurrent so that the installation time becomes minimal.
 
 # Features
 
@@ -125,7 +125,7 @@ Head over to the [Concurrency](https://github.com/mumoshu/variant2#concurrency) 
 
 ## Concurrency
 
-The example in the `Getting Started` guide can be modified by adding `needs` to build a DAG of steps and `concurrency` for setting the desired number of concurrency:
+The example in the [`Getting Started`](#getting-started) guide can be modified by adding `needs` to build a DAG of steps and `concurrency` for setting the desired number of concurrency:
 
 BEFORE:
 
