@@ -47,6 +47,8 @@ job "helm" {
 }
 
 job "deploy" {
+  description = "Deploys our application and the infrastructure onto the K8s cluster"
+
   step "deploy infra" {
     run "helm" {
       release = "app1"
@@ -85,6 +87,21 @@ Flags:
   -n, --namespace string   Namespace to interact with
 
 Use "variant run [command] --help" for more information about a command.
+```
+
+And `variant run deploy -h` for the usage for the specific job = sub-command named `deploy`:
+
+```
+Deploys our application and the infrastructure onto the K8s cluster
+
+Usage:
+  variant run deploy [flags]
+
+Flags:
+  -h, --help   help for deploy
+
+Global Flags:
+  -n, --namespace string   Namespace to interact with
 ```
 
 As you've seen in the help output, `variant run deploy` runs the `deploy` job, which in turn runs `kubectl` and `helm` to install your apps onto the K8s cluster:

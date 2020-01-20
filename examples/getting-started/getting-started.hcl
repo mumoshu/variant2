@@ -34,6 +34,8 @@ job "helm" {
 }
 
 job "deploy" {
+  description = "Deploys our application and the infrastructure onto the K8s cluster"
+
   step "deploy infra" {
     run "helm" {
       release = "app1"
