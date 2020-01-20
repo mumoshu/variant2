@@ -110,10 +110,12 @@ As you've seen in the help output, `variant run deploy` runs the `deploy` job, w
 $ variant run deploy
 ```
 
+Head over to the [Concurrency](https://github.com/mumoshu/variant2#concurrency) section to make `kubectl` and `helm` runs concurrent so that the installation time becomes minimal.
+
 # Features
 
 - **HCL-based DSL**: Terraform-like strongly-typed DSL on top of HCL to define your command. See `Configuration Language` below.
-- **Concurrency and Workflow**: Embedded workflow engine with concurrency. See `Concurrency` below. Example: [concurrency](https://github.com/mumoshu/variant2/tree/master/examples/concurrency)
+- **Concurrency and Workflow**: Embedded workflow engine with concurrency. See [`Concurrency`](https://github.com/mumoshu/variant2#concurrency) below. Example: [concurrency](https://github.com/mumoshu/variant2/tree/master/examples/concurrency)
 - **Configs**: Deep-merging YAML configuration files. Example: [config](https://github.com/mumoshu/variant2/tree/master/examples/config)
 - **Secrets**: Deep-merging secret values from Vault, AWS SecretsManager, SOPS, etc. powered by [vals](https://github.com/variantdev/vals). Example: [secret](https://github.com/mumoshu/variant2/tree/master/examples/secret)
 - **Testing**: Test framework with `go test`-compatible test runner. Example: [simple](https://github.com/mumoshu/variant2/tree/master/examples/simple)
