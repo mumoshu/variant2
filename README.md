@@ -95,13 +95,14 @@ $ variant run deploy
 
 # Features
 
-- Terraform-like strongly-typed DSL on top of HCL to define your command. See `Configuration Language` below
-- Embedded workflow engine with concurrency. See `Concurrency` below
-- Deep-merging YAML configuration files
-- Deep-merging secret values from Vault, AWS SecretsManager, SOPS, etc. powered by [vals](https://github.com/variantdev/vals)
-- Test framework with `go test`-compatible test runner
-- Easy embedding in any Golang application
-- Build a single-executable of your command with Golang
+- **HCL-based DSL**: Terraform-like strongly-typed DSL on top of HCL to define your command. See `Configuration Language` below
+- **Concurrency and Workflow**: Embedded workflow engine with concurrency. See `Concurrency` below
+- **Configs**: Deep-merging YAML configuration files
+- **Secrets**: Deep-merging secret values from Vault, AWS SecretsManager, SOPS, etc. powered by [vals](https://github.com/variantdev/vals)
+- **Testing**: Test framework with `go test`-compatible test runner
+- **Embeddable**: Easy embedding in any Golang application
+- **Easy distribution**: Build a single-executable of your command with Golang
+- **Dependency Management**: Dependent files and executable binaries can be automatically installed and updated with the [variantdev/mod](https://github.com/variantdev/mod) integration
 
 ## Concurrency
 
