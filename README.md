@@ -112,14 +112,14 @@ $ variant run deploy
 
 # Features
 
-- **HCL-based DSL**: Terraform-like strongly-typed DSL on top of HCL to define your command. See `Configuration Language` below
-- **Concurrency and Workflow**: Embedded workflow engine with concurrency. See `Concurrency` below
-- **Configs**: Deep-merging YAML configuration files
-- **Secrets**: Deep-merging secret values from Vault, AWS SecretsManager, SOPS, etc. powered by [vals](https://github.com/variantdev/vals)
-- **Testing**: Test framework with `go test`-compatible test runner
+- **HCL-based DSL**: Terraform-like strongly-typed DSL on top of HCL to define your command. See `Configuration Language` below.
+- **Concurrency and Workflow**: Embedded workflow engine with concurrency. See `Concurrency` below. Example: [concurrency](https://github.com/mumoshu/variant2/tree/master/examples/concurrency)
+- **Configs**: Deep-merging YAML configuration files. Example: [config](https://github.com/mumoshu/variant2/tree/master/examples/config)
+- **Secrets**: Deep-merging secret values from Vault, AWS SecretsManager, SOPS, etc. powered by [vals](https://github.com/variantdev/vals). Example: [secret](https://github.com/mumoshu/variant2/tree/master/examples/secret)
+- **Testing**: Test framework with `go test`-compatible test runner. Example: [simple](https://github.com/mumoshu/variant2/tree/master/examples/simple)
 - **Embeddable**: Easy embedding in any Golang application
 - **Easy distribution**: Build a single-executable of your command with Golang
-- **Dependency Management**: Dependent files and executable binaries can be automatically installed and updated with the [variantdev/mod](https://github.com/variantdev/mod) integration
+- **Dependency Management**: Dependent files, executable binaries and docker-run shims can be automatically installed and updated with the [variantdev/mod](https://github.com/variantdev/mod) integration. Example: [module](https://github.com/mumoshu/variant2/tree/master/examples/module)
 
 ## Concurrency
 
