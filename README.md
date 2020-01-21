@@ -184,7 +184,9 @@ Variant uses its own configuration language based on [the HashiCorp configuratio
 
 It is designed to allow concise descriptions of your command. The Variant language is declarative, describing an intended goal of the command rather than the steps to compose your command.
 
-In addition to everything available via the [native HCL syntax](https://github.com/hashicorp/hcl/blob/hcl2/hclsyntax/spec.md), Variant language provides the following HCL `blocks` to declare your command:
+In addition to everything available via the [native HCL syntax](https://github.com/hashicorp/hcl/blob/hcl2/hclsyntax/spec.md), Variant language provides the following HCL `blocks` and `functions` to declare your command.
+
+**Blocks**:
 
 - Parameters
 - Options
@@ -195,11 +197,31 @@ In addition to everything available via the [native HCL syntax](https://github.c
 - Runs
 - Steps
 
-To learn more, see [examples](https://github.com/mumoshu/variant2/tree/master/examples) for working examples covering all these `blocks`.
+**Functions**:
 
-Optionally read the following for overviews on each type of block.
+- All the [Terraform functions](https://www.terraform.io/docs/configuration/functions.html)
+- Plus a few Variant-specific functions
+  - `jsonpath` ([definition](/pkg/conf/jsonpath.go#L26), [example](/examples/complex/complex.hcl#L6))
 
-## Job
+
+### Examples
+
+To learn more, see [examples](https://github.com/mumoshu/variant2/tree/master/examples) for working examples covering all these `blocks` and `functions`.
+
+Optionally read the following for overviews on each type of block and functions.
+
+### Blocks
+
+- [Job](#job)
+- Parameters
+- Options
+- Tests
+- Exec's
+- Asserts
+- Runs
+- Steps
+
+#### Job
 
 Do only one thing in each "job"
 
