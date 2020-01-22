@@ -1,0 +1,55 @@
+// test for `job "app deploy"`
+test "app deploy" {
+  case "ng1" {
+    namespace = "foo"
+    exitstatus = 1
+    err = trimspace(<<EOS
+command "bash -c     kubectl -n foo apply -f examples/simple/manifests/
+": exit status 1
+EOS
+    )
+  }
+
+  case "ok1" {
+    namespace = "default"
+    exitstatus = 0
+    err = ""
+  }
+
+  // creates an executable command `mocks/kubectl/kubectl` where `${command.kubectl.dir}` returns `mocks/kubectl`
+  command "kubectl" {
+    option namespace {
+      type = string
+      short = "n"
+    }
+
+    option file {
+      type = string
+      short = "f"
+    }
+
+    job "apply" {
+      variable d {
+        type = string
+        value = join("", list(dirname(dirname(context.sourcedir)), "/manifests/"))
+      }
+
+      assert "args" {
+        condition = (abspath(opt.file) == abspath(var.d)) && (opt.namespace == case.namespace)
+      }
+    }
+  }
+
+  run "app deploy" {
+    namespace = case.namespace
+    path = ".:/bin:/usr/bin:${abspath(command.kubectl.dir)}"
+  }
+
+  assert "error" {
+    condition = run.err == case.err
+  }
+
+  assert "exitstatus" {
+    condition = run.res.exitstatus == case.exitstatus
+  }
+}
