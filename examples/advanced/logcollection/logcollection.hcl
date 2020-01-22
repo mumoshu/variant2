@@ -41,7 +41,7 @@ job "test" {
       format = jsonencode(event.run_start)
     }
 
-    store {
+    forward {
       run "save-logs" {
         logfile = log.file
       }
