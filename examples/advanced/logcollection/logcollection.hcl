@@ -27,18 +27,13 @@ job "test" {
 
   log {
     collect {
-      condition = event.type == "exec_start" && event.exec_start.step == ""
-      format = jsonencode(event.exec_start)
+      condition = event.type == "exec" && event.exec.step == ""
+      format = jsonencode(event.exec)
     }
 
     collect {
-      condition = event.type == "exec_end"
-      format = jsonencode(event.exec_end)
-    }
-
-    collect {
-      condition = event.type == "run_start"
-      format = jsonencode(event.run_start)
+      condition = event.type == "run"
+      format = jsonencode(event.run)
     }
 
     forward {
