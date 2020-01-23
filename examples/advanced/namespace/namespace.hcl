@@ -8,7 +8,7 @@ namespace "foo" {
   }
 }
 
-namespace "bar" {
+namespace "foo bar" {
   # `variant run foo` shows this description
   description = "collection of jobs related to bar"
 
