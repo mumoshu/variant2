@@ -5,7 +5,7 @@ job "echo" {
 
   exec {
     command = "echo"
-    args = ["text=", param.message]
+    args = ["text=${param.message}"]
   }
 }
 
@@ -27,14 +27,16 @@ job "test" {
 
   log {
     collect {
-      condition = event.type == "exec" && event.exec.step == ""
-      format = jsonencode(event.exec)
+      condition = event.type == "exec"
+      format = "exec=${jsonencode(event.exec)}"
     }
 
     collect {
       condition = event.type == "run"
-      format = jsonencode(event.run)
+      format = "run=${jsonencode(event.run)}"
     }
+
+    file = "${context.sourcedir}/log.txt"
 
     forward {
       run "save-logs" {

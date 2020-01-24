@@ -110,6 +110,12 @@ func TestExamples(t *testing.T) {
 			variantDir:  "./examples/rubyrunner",
 			expectOut:   "TEST\n",
 		},
+		{
+			subject:     "logcollection",
+			variantName: "",
+			args:        []string{"variant", "test"},
+			wd:          "./examples/advanced/logcollection",
+		},
 	}
 
 	for i := range testcases {

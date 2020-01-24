@@ -29,7 +29,7 @@ func main() {
 		Stderr: os.Stderr,
 		Args:   os.Args,
 		Getenv: os.Getenv,
-		Getwd: os.Getwd,
+		Getwd:  os.Getwd,
 	}
 	err := m.Run()
 	if err != nil {
@@ -294,13 +294,13 @@ func (m Main) Run() error {
 	}
 
 	rootCmd := &cobra.Command{
-		Use: "variant",
+		Use:     "variant",
 		Version: Version,
 	}
 	testCmd := &cobra.Command{
 		Use:   "test [NAME]",
 		Short: "Run test(s)",
-		Args: cobra.MaximumNArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			var prefix string
 			if len(args) > 0 {
