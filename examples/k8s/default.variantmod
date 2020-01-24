@@ -1,0 +1,50 @@
+module "default" {
+  dependency "github_release" "helm" {
+    source = "helm/helm"
+    version = "> 1.0.0, < 3.0.1"
+  }
+
+  dependency "github_release" "kube" {
+    source = "kubernetes/kubernetes"
+    version = "> 1.17.0"
+  }
+
+  file "Dockerfile" {
+    source = "Dockerfile.tpl"
+    args = {
+      helm_version = "${dep.helm.version}"
+    }
+  }
+
+  # Grab the path to the installation dir with ${mod.default.path}
+  executable "helm3" {
+    platform {
+      # Adds $VARIANT_MOD_PATH/mod/cache/default/CACHE_KEY/helm2 to $PATH
+      # Or its shim at $VARIANT_MOD_PATH/MODULE_NAME/shims
+      docker {
+        command = "helm"
+        image = "alpine/helm"
+        tag = "${dep.helm.version}"
+        volumes = [
+          "$PWD:/work"]
+        workdir = "/work"
+      }
+    }
+  }
+
+  executable "k" {
+    platform {
+      # Adds $VARIANT_MOD_PATH/mod/cache/default/CACHE_KEY/k to $PATH
+      # Or its shim at $VARIANT_MOD_PATH/MODULE_NAME/shims
+      docker {
+        command = "kubectl"
+        image = "k8s.gcr.io/hyperkube"
+        tag = "v${dep.kube.version}"
+        volumes = [
+          "$PWD:/work",
+          "$HOME/.kube:/root/.kube"]
+        workdir = "/work"
+      }
+    }
+  }
+}

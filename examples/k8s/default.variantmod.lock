@@ -1,0 +1,5 @@
+dependencies:
+  helm:
+    version: 3.0.0
+  kube:
+    version: 1.17.2
