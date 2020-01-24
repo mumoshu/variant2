@@ -90,6 +90,54 @@ func configureCommand(cli *cobra.Command, root app.JobSpec) (*Config, error) {
 				}
 				return v
 			}
+		case cty.Number:
+			var v int
+			if o.Short != nil {
+				cli.PersistentFlags().IntVarP(&v, o.Name, *o.Short, 0, desc)
+			} else {
+				cli.PersistentFlags().IntVar(&v, o.Name, 0, desc)
+			}
+			options[o.Name] = &v
+			optionFeeds[o.Name] = func() interface{} {
+				// This avoids setting "" when the flag is actually missing, so that
+				// we can differentiate between when (1)an empty string is specified vs (2)no flag is provided.
+				if cli.PersistentFlags().Lookup(o.Name).Changed {
+					return v
+				}
+				return v
+			}
+		case cty.List(cty.String):
+			v := []string{}
+			if o.Short != nil {
+				cli.PersistentFlags().StringSliceVarP(&v, o.Name, *o.Short, []string{}, desc)
+			} else {
+				cli.PersistentFlags().StringSliceVar(&v, o.Name, []string{}, desc)
+			}
+			options[o.Name] = &v
+			optionFeeds[o.Name] = func() interface{} {
+				// This avoids setting "" when the flag is actually missing, so that
+				// we can differentiate between when (1)an empty string is specified vs (2)no flag is provided.
+				if cli.PersistentFlags().Lookup(o.Name).Changed {
+					return v
+				}
+				return v
+			}
+		case cty.List(cty.Number):
+			v := []int{}
+			if o.Short != nil {
+				cli.PersistentFlags().IntSliceVarP(&v, o.Name, *o.Short, []int{}, desc)
+			} else {
+				cli.PersistentFlags().IntSliceVar(&v, o.Name, []int{}, desc)
+			}
+			options[o.Name] = &v
+			optionFeeds[o.Name] = func() interface{} {
+				// This avoids setting "" when the flag is actually missing, so that
+				// we can differentiate between when (1)an empty string is specified vs (2)no flag is provided.
+				if cli.PersistentFlags().Lookup(o.Name).Changed {
+					return v
+				}
+				return v
+			}
 		}
 		if o.Default.Range().Start != o.Default.Range().End {
 
