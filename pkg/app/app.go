@@ -808,6 +808,18 @@ func ctyToGo(v cty.Value) (interface{}, error) {
 			return nil, err
 		}
 		vv = vvv
+	case cty.List(cty.String):
+		var vvv []string
+		if err := gocty.FromCtyValue(v, &vvv); err != nil {
+			return nil, err
+		}
+		vv = vvv
+	case cty.List(cty.Number):
+		var vvv []int
+		if err := gocty.FromCtyValue(v, &vvv); err != nil {
+			return nil, err
+		}
+		vv = vvv
 	default:
 		return nil, fmt.Errorf("handler for type %s not implemneted yet", v.Type().FriendlyName())
 	}

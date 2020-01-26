@@ -116,6 +116,12 @@ func TestExamples(t *testing.T) {
 			args:        []string{"variant", "test"},
 			wd:          "./examples/advanced/logcollection",
 		},
+		{
+			subject:     "options",
+			variantName: "",
+			args:        []string{"variant", "test"},
+			wd:          "./examples/options",
+		},
 	}
 
 	for i := range testcases {
