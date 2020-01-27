@@ -1,5 +1,5 @@
 job "foo" {
-  import = "${context.sourcedir}/foo"
+  delegate = "${context.sourcedir}/foo"
 }
 
 job "test" {
