@@ -1,8 +1,8 @@
 .PHONY: build
 build:
-	go build -o variant2 ./
+	go build -o variant ./
 
 .PHONY: test
 test: build
 	go vet ./...
-	go test ./...
+	PATH=$(PWD):$(PATH) go test ./...

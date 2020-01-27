@@ -361,8 +361,27 @@ func (m Main) Run() error {
 			return err
 		},
 	}
+	exportCmd := &cobra.Command{
+		Use: "export SUBCOMMAND SRC_DIR OUTPUT_PATH",
+		Short: "Export the Variant command defined in SRC_DIR to OUTPUT_PATH",
+	}
+	shimCmd := &cobra.Command{
+		Use:   "shim SRC_DIR DST_DIR",
+		Short: "Copy and generate shim for the Variant command defined in the SRC",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(c *cobra.Command, args []string) error {
+			err := ap.ExportShim(args[0], args[1])
+			if err != nil {
+				c.SilenceUsage = true
+			}
+			return err
+		},
+	}
+	exportCmd.AddCommand(shimCmd)
+
 	rootCmd.AddCommand(runRootCmd)
 	rootCmd.AddCommand(testCmd)
+	rootCmd.AddCommand(exportCmd)
 	rootCmd.SetArgs(m.Args[1:])
 	return rootCmd.Execute()
 }

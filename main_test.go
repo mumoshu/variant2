@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -178,6 +181,92 @@ func TestExamples(t *testing.T) {
 				if tc.expectOut != out {
 					t.Errorf("unexpected output: want %q, got %q", tc.expectOut, out)
 				}
+			}
+		})
+	}
+}
+
+func TestExport(t *testing.T) {
+	testcases := []struct {
+		subject    string
+		exportArgs []string
+		testArgs   []string
+		srcDir     string
+		dstDir     string
+		expectErr  string
+		expectOut  string
+	}{
+		{
+			subject:    "simple",
+			exportArgs: []string{"variant", "export", "shim"},
+			testArgs:   []string{"test", "--int1", "1", "--ints1", "1,2", "--str1", "a", "--strs1", "b,c"},
+			srcDir:     "./test/export/simple/src",
+			dstDir:     "./test/export/simple/dst",
+		},
+	}
+
+	for i := range testcases {
+		tc := testcases[i]
+		t.Run(fmt.Sprintf("%d: %s", i, tc.subject), func(t *testing.T) {
+			outRead, outWrite := io.Pipe()
+			m := Main{
+				Stdout: outWrite,
+				Stderr: os.Stderr,
+				Args:   append(append([]string{}, tc.exportArgs...), tc.srcDir, tc.dstDir),
+				Getenv: func(name string) string {
+					switch name {
+					case "VARIANT_NAME":
+						return ""
+					case "VARIANT_DIR":
+						return ""
+					default:
+						panic(fmt.Sprintf("Unexpected call to getenv %q", name))
+					}
+				},
+				Getwd: func() (string, error) {
+					if tc.srcDir != "" {
+						return tc.srcDir, nil
+					}
+					return "", fmt.Errorf("Unexpected call to getw")
+				},
+			}
+			var err error
+
+			go func() {
+				err = m.Run()
+				outWrite.Close()
+			}()
+
+			buf := new(bytes.Buffer)
+			buf.ReadFrom(outRead)
+			out := buf.String()
+
+			if tc.expectErr != "" {
+				if err == nil {
+					t.Fatalf("Expected error didn't occur")
+				} else {
+					if err.Error() != tc.expectErr {
+						t.Fatalf("Unexpected error: want %q, got %q", tc.expectErr, err.Error())
+					}
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("%+v", err)
+				}
+			}
+
+			if tc.expectOut != "" {
+				if tc.expectOut != out {
+					t.Errorf("unexpected output: want %q, got %q", tc.expectOut, out)
+				}
+			}
+
+			base := filepath.Base(tc.dstDir)
+			shimPath := fmt.Sprintf("%s/%s", tc.dstDir, base)
+			args := []string{"-c", strings.Join(append([]string{shimPath}, tc.testArgs...), " ")}
+			cmd := exec.Command("/bin/bash", args...)
+			if err := cmd.Run(); err != nil {
+				t.Fatalf("failed to exec %s: %v", shimPath, err)
 			}
 		})
 	}

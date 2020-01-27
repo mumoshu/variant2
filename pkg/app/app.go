@@ -245,6 +245,8 @@ func (t *configurable) HCL2Config() (*HCL2Config, error) {
 }
 
 type App struct {
+	BinName string
+
 	Files     map[string]*hcl2.File
 	Config    *HCL2Config
 	jobByName map[string]JobSpec
@@ -254,31 +256,40 @@ type App struct {
 	TraceCommands []string
 }
 
-func New(dir string) (*App, error) {
+func newConfig(dir string) (map[string]*hcl2.File, hcl2.Body, *HCL2Config, error) {
 	l := &hcl2Loader{
 		Parser: hcl2parse.NewParser(),
 	}
 
+	nameToFiles := map[string]*hcl2.File{}
+
 	files, err := conf.FindHCLFiles(dir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get .hcl files: %v", err)
+		return nameToFiles, nil, nil, fmt.Errorf("failed to get .hcl files: %v", err)
 	}
 
 	//file := "complex.hcl"
 	c, hclFiles, err := l.loadFile(files...)
-	nameToFiles := map[string]*hcl2.File{}
 	for i := range files {
 		nameToFiles[files[i]] = hclFiles[i]
 	}
 
-	app := &App{
-		Files: nameToFiles,
-	}
 	if err != nil {
-		return app, err
+		return nameToFiles, c.Body, nil, err
 	}
 
 	cc, err := c.HCL2Config()
+
+	return nameToFiles, c.Body, cc, err
+}
+
+func New(dir string) (*App, error) {
+	nameToFiles, _, cc, err := newConfig(dir)
+
+	app := &App{
+		Files: nameToFiles,
+	}
+
 	if err != nil {
 		return app, err
 	}
