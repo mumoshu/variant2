@@ -5,9 +5,13 @@ import (
 	"path/filepath"
 )
 
-// FindHCLFiles walks the given path and returns the files ending whose ext is .hcl
+const (
+	VariantFileExt = ".variant"
+)
+
+// FindVariantFiles walks the given path and returns the files ending whose ext is .variant
 // Also, it returns the path if the path is just a file and a HCL file
-func FindHCLFiles(path string) ([]string, error) {
+func FindVariantFiles(path string) ([]string, error) {
 	var (
 		files []string
 		err   error
@@ -17,10 +21,26 @@ func FindHCLFiles(path string) ([]string, error) {
 		return files, err
 	}
 	if fi.IsDir() {
-		return filepath.Glob(filepath.Join(path, "*.hcl"))
+		found, err := filepath.Glob(filepath.Join(path, "*"+VariantFileExt))
+		if err != nil {
+			return nil, err
+		}
+
+		for _, f := range found {
+			info, err := os.Stat(f)
+			if err != nil {
+				return nil, err
+			}
+			if info.IsDir() {
+				continue
+			}
+			files = append(files, f)
+		}
+
+		return files, nil
 	}
 	switch filepath.Ext(path) {
-	case ".hcl":
+	case VariantFileExt:
 		files = append(files, path)
 	}
 	return files, err

@@ -3,4 +3,4 @@
 export VARIANT_NAME=$(basename $0)
 export VARIANT_DIR=$(dirname $0)
 
-exec variant2 $@
+exec variant $@

@@ -31,6 +31,8 @@ import (
 	"testing"
 )
 
+const NoRunMessage = "nothing to run"
+
 type hcl2Loader struct {
 	Parser *hcl2parse.Parser
 }
@@ -39,31 +41,47 @@ type configurable struct {
 	Body hcl2.Body
 }
 
-func (l hcl2Loader) loadFile(filenames ...string) (*configurable, []*hcl2.File, error) {
+func (l hcl2Loader) loadFile(filenames ...string) (*configurable, map[string]*hcl2.File, error) {
+	srcs := map[string][]byte{}
+
+	for _, filename := range filenames {
+		src, err := ioutil.ReadFile(filename)
+		if err != nil {
+			return nil, nil, err
+		}
+		srcs[filename] = src
+	}
+
+	return l.loadSources(srcs)
+}
+
+func (l hcl2Loader) loadSources(srcs map[string][]byte) (*configurable, map[string]*hcl2.File, error) {
+	nameToFiles := map[string]*hcl2.File{}
 	var files []*hcl2.File
 	var diags hcl2.Diagnostics
 
-	for _, filename := range filenames {
+	for filename, src := range srcs {
 		var f *hcl2.File
 		var ds hcl2.Diagnostics
 		if strings.HasSuffix(filename, ".json") {
-			f, ds = l.Parser.ParseJSONFile(filename)
+			f, ds = l.Parser.ParseJSON(src, filename)
 		} else {
-			f, ds = l.Parser.ParseHCLFile(filename)
+			f, ds = l.Parser.ParseHCL(src, filename)
 		}
+		nameToFiles[filename] = f
 		files = append(files, f)
 		diags = append(diags, ds...)
 	}
 
 	if diags.HasErrors() {
-		return nil, files, diags
+		return nil, nameToFiles, diags
 	}
 
 	body := hcl2.MergeFiles(files)
 
 	return &configurable{
 		Body: body,
-	}, files, nil
+	}, nameToFiles, nil
 }
 
 type Config struct {
@@ -165,6 +183,7 @@ type JobSpec struct {
 	Assert []Assert        `hcl:"assert,block"`
 	Fail   hcl2.Expression `hcl:"fail,attr"`
 	Run    *RunJob         `hcl:"run,block"`
+	Import *string         `hcl:"import,attr"`
 
 	Log *LogSpec `hcl:"log,block"`
 
@@ -249,42 +268,15 @@ type App struct {
 
 	Files     map[string]*hcl2.File
 	Config    *HCL2Config
-	jobByName map[string]JobSpec
+	JobByName map[string]JobSpec
 
 	Stdout, Stderr io.Writer
 
 	TraceCommands []string
 }
 
-func newConfig(dir string) (map[string]*hcl2.File, hcl2.Body, *HCL2Config, error) {
-	l := &hcl2Loader{
-		Parser: hcl2parse.NewParser(),
-	}
-
-	nameToFiles := map[string]*hcl2.File{}
-
-	files, err := conf.FindHCLFiles(dir)
-	if err != nil {
-		return nameToFiles, nil, nil, fmt.Errorf("failed to get .hcl files: %v", err)
-	}
-
-	//file := "complex.hcl"
-	c, hclFiles, err := l.loadFile(files...)
-	for i := range files {
-		nameToFiles[files[i]] = hclFiles[i]
-	}
-
-	if err != nil {
-		return nameToFiles, c.Body, nil, err
-	}
-
-	cc, err := c.HCL2Config()
-
-	return nameToFiles, c.Body, cc, err
-}
-
 func New(dir string) (*App, error) {
-	nameToFiles, _, cc, err := newConfig(dir)
+	nameToFiles, _, cc, err := newConfigFromDir(dir)
 
 	app := &App{
 		Files: nameToFiles,
@@ -294,14 +286,135 @@ func New(dir string) (*App, error) {
 		return app, err
 	}
 
-	jobByName := map[string]JobSpec{}
-	for _, j := range cc.Jobs {
-		jobByName[j.Name] = j
-	}
-	jobByName[""] = cc.JobSpec
+	return newApp(app, cc, dir, true)
+}
 
-	app.Config = cc
-	app.jobByName = jobByName
+func NewFromFile(file string) (*App, error) {
+	nameToFiles, _, cc, err := newConfigFromFiles([]string{file})
+
+	app := &App{
+		Files: nameToFiles,
+	}
+
+	if err != nil {
+		return app, err
+	}
+
+	dir := filepath.Dir(file)
+
+	return newApp(app, cc, dir, true)
+}
+
+func NewFromSources(srcs map[string][]byte) (*App, error) {
+	nameToFiles, _, cc, err := newConfigFromSources(srcs)
+
+	app := &App{
+		Files: nameToFiles,
+	}
+
+	if err != nil {
+		return app, err
+	}
+
+	return newApp(app, cc, "", false)
+}
+
+func newConfigFromDir(dir string) (map[string]*hcl2.File, hcl2.Body, *HCL2Config, error) {
+	files, err := conf.FindVariantFiles(dir)
+	if err != nil {
+		return map[string]*hcl2.File{}, nil, nil, fmt.Errorf("failed to get %s files: %v", conf.VariantFileExt, err)
+	}
+
+	return newConfigFromFiles(files)
+}
+
+func newConfigFromFiles(files []string) (map[string]*hcl2.File, hcl2.Body, *HCL2Config, error) {
+	l := &hcl2Loader{
+		Parser: hcl2parse.NewParser(),
+	}
+
+	nameToFiles := map[string]*hcl2.File{}
+
+	c, nameToFiles, err := l.loadFile(files...)
+
+	if err != nil {
+		var body hcl2.Body
+		if c != nil {
+			body = c.Body
+		}
+		return nameToFiles, body, nil, err
+	}
+
+	cc, err := c.HCL2Config()
+
+	return nameToFiles, c.Body, cc, err
+}
+
+func newConfigFromSources(srcs map[string][]byte) (map[string]*hcl2.File, hcl2.Body, *HCL2Config, error) {
+	l := &hcl2Loader{
+		Parser: hcl2parse.NewParser(),
+	}
+
+	nameToFiles := map[string]*hcl2.File{}
+
+	c, nameToFiles, err := l.loadSources(srcs)
+
+	if err != nil {
+		var body hcl2.Body
+		if c != nil {
+			body = c.Body
+		}
+		return nameToFiles, body, nil, err
+	}
+
+	cc, err := c.HCL2Config()
+
+	return nameToFiles, c.Body, cc, err
+}
+
+func newApp(app *App, cc *HCL2Config, importBaseDir string, enableImports bool) (*App, error) {
+	jobs := append([]JobSpec{cc.JobSpec}, cc.Jobs...)
+
+	var conf *HCL2Config
+
+	jobByName := map[string]JobSpec{}
+	for _, j := range jobs {
+		jobByName[j.Name] = j
+
+		if j.Import != nil {
+			if !enableImports {
+				return nil, fmt.Errorf("[bug] Imports are disable in the embedded mode")
+			}
+
+			d := filepath.Join(importBaseDir, *j.Import)
+			a, err := New(d)
+			if err != nil {
+				return nil, err
+			}
+
+			importedJobs := append([]JobSpec{a.Config.JobSpec}, a.Config.Jobs...)
+			for _, importedJob := range importedJobs {
+				var newJobName string
+				if j.Name == "" {
+					newJobName = importedJob.Name
+				} else {
+					newJobName = fmt.Sprintf("%s %s", j.Name, importedJob.Name)
+				}
+				jobByName[newJobName] = importedJob
+
+				if j.Name == "" && importedJob.Name == "" {
+					conf = a.Config
+				}
+			}
+		}
+	}
+
+	if conf == nil {
+		conf = cc
+	}
+	app.Config = conf
+
+	app.JobByName = jobByName
 
 	return app, nil
 }
@@ -311,7 +424,7 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 }
 
 func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}) (*Result, error) {
-	jobByName := app.jobByName
+	jobByName := app.JobByName
 	cc := app.Config
 
 	j, ok := jobByName[cmd]
@@ -443,16 +556,21 @@ func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opt
 	} else {
 		concurrency = 1
 	}
-	res, err := app.execJobSteps(l, jobCtx, needs, j.Steps, concurrency)
-	if res != nil || err != nil {
-		return res, err
+
+	{
+		res, err := app.execJobSteps(l, jobCtx, needs, j.Steps, concurrency)
+		if res != nil || err != nil {
+			return res, err
+		}
 	}
 
-	r, err := app.execJob(l, j, jobCtx)
-	if r == nil && err == nil {
-		return nil, fmt.Errorf("nothing to run")
+	{
+		r, err := app.execJob(l, j, jobCtx)
+		if r == nil && err == nil {
+			return nil, fmt.Errorf(NoRunMessage)
+		}
+		return r, err
 	}
-	return r, err
 }
 
 func (app *App) WriteDiags(diagnostics hcl2.Diagnostics) {

@@ -1,4 +1,4 @@
-job "foo bar" {
+job "bar" {
   parameter "message" {
     type = string
   }

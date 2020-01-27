@@ -34,7 +34,7 @@ job "c" {
 Alternative:
 
 ```
-# cmd1/cmd1.hcl
+# cmd1/cmd1.variant
 
 option "common1" {
 
@@ -48,7 +48,7 @@ job "b" {
 
 }
 
-# cmd2/cmd2.hcl
+# cmd2/cmd2.variant
 
 option "common2" {
 

@@ -8,7 +8,9 @@ Once finished, this repository will eventually take over the `master` branch of 
 
 # Getting Started
 
-Create an `hcl` file that contains the following:
+Create an `variant` file that contains the following:
+
+`getting-started.variant`:
 
 ```hcl
 option "namespace" {
@@ -201,7 +203,7 @@ In addition to everything available via the [native HCL syntax](https://github.c
 
 - All the [Terraform built-in functions](https://www.terraform.io/docs/configuration/functions.html)
 - Plus a few Variant-specific functions
-  - `jsonpath` ([definition](/pkg/conf/jsonpath.go#L26), [example](/examples/complex/complex.hcl#L6))
+  - `jsonpath` ([definition](/pkg/conf/jsonpath.go#L26), [example](/examples/complex/complex.variant#L6))
 
 
 ### Examples

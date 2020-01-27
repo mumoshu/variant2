@@ -4,13 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/hashicorp/hcl/v2"
+	"github.com/mumoshu/hcl2test/pkg/conf"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-)
-
-const (
-	VariantFileExt = ".hcl"
 )
 
 func (a *App) ExportShim(srcDir, dstDir string) error {
@@ -18,7 +15,7 @@ func (a *App) ExportShim(srcDir, dstDir string) error {
 		return err
 	}
 
-	files, _, _, err := newConfig(srcDir)
+	files, _, _, err := newConfigFromDir(srcDir)
 	if err != nil {
 		return err
 	}
@@ -37,7 +34,7 @@ func generateShim(variantBin string, files map[string]*hcl.File, dstDir string) 
 	binName := filepath.Base(dstDir)
 
 	binPath := filepath.Join(dstDir, binName)
-	cfgPath := filepath.Join(dstDir, binName+VariantFileExt)
+	cfgPath := filepath.Join(dstDir, binName+conf.VariantFileExt)
 
 	buf := bytes.Buffer{}
 	for _, file := range files {

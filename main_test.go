@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestExamples(t *testing.T) {
@@ -118,6 +120,12 @@ func TestExamples(t *testing.T) {
 			variantName: "",
 			args:        []string{"variant", "test"},
 			wd:          "./examples/advanced/logcollection",
+		},
+		{
+			subject:     "import",
+			variantName: "",
+			args:        []string{"variant", "test"},
+			wd:          "./examples/advanced/import",
 		},
 		{
 			subject:     "options",
@@ -267,6 +275,92 @@ func TestExport(t *testing.T) {
 			cmd := exec.Command("/bin/bash", args...)
 			if err := cmd.Run(); err != nil {
 				t.Fatalf("failed to exec %s: %v", shimPath, err)
+			}
+		})
+	}
+}
+
+func TestExec(t *testing.T) {
+	testcases := []struct {
+		subject string
+		testCmd []string
+		err     string
+		out     string
+	}{
+		{
+			subject: "shebang_test",
+			testCmd: []string{"./test/shebang/myapp/myapp", "test", "--int1", "1", "--ints1", "1,2", "--str1", "a", "--strs1", "b,c"},
+			out: `1 1 2 a b|c
+`,
+		},
+		{
+			subject: "shebang_test_usage",
+			testCmd: []string{"./test/shebang/myapp/myapp", "test"},
+			err:     `exit status 1`,
+			out:     `Error: required flag(s) "int1", "ints1", "str1", "strs1" not set
+Usage:
+  myapp test [flags]
+
+Flags:
+  -h, --help   help for test
+
+Global Flags:
+      --int1 int        
+      --ints1 ints      
+      --str1 string     
+      --strs1 strings
+
+Error: required flag(s) "int1", "ints1", "str1", "strs1" not set`,
+		},
+		{
+			subject: "shebang_usage",
+			testCmd: []string{"./test/shebang/myapp/myapp"},
+			err:     `exit status 1`,
+			out:     `Error: required flag(s) "int1", "ints1", "str1", "strs1" not set
+Usage:
+  myapp [flags]
+  myapp [command]
+
+Available Commands:
+  help        Help about any command
+  test        
+
+Flags:
+  -h, --help            help for myapp
+      --int1 int        
+      --ints1 ints      
+      --str1 string     
+      --strs1 strings
+
+Use "myapp [command] --help" for more information about a command.
+
+Error: required flag(s) "int1", "ints1", "str1", "strs1" not set`,
+		},
+	}
+
+	for i := range testcases {
+		tc := testcases[i]
+		t.Run(fmt.Sprintf("%d: %s", i, tc.subject), func(t *testing.T) {
+			cmdline := strings.Join(tc.testCmd, " ")
+			args := []string{"-c", cmdline}
+			cmd := exec.Command("/bin/bash", args...)
+			outBytes, err := cmd.CombinedOutput()
+			out := string(outBytes)
+			t.Log(out)
+			if tc.err == "" {
+				if err != nil {
+					t.Errorf("failed to exec %s: %v", cmdline, err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("expected error did not occur: want %q", tc.err)
+				} else if tc.err != err.Error() {
+					t.Errorf("unexpected error: want %q, got %v", tc.err, err)
+				}
+			}
+			diff := cmp.Diff(tc.out, out)
+			if tc.out != "" && diff != "" {
+				t.Errorf("unexpected output: %s", diff)
 			}
 		})
 	}

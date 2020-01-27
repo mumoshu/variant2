@@ -3,6 +3,7 @@ module github.com/mumoshu/hcl2test
 go 1.13
 
 require (
+	github.com/google/go-cmp v0.3.1
 	github.com/hashicorp/go-multierror v1.0.0
 	github.com/hashicorp/hcl/v2 v2.3.0
 	github.com/hashicorp/terraform v0.12.18

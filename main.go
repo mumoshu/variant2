@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,6 +18,8 @@ import (
 var Version string
 
 type Main struct {
+	Command        string
+	Source         []byte
 	Stdout, Stderr io.Writer
 	Args           []string
 	Getenv         func(string) string
@@ -223,23 +226,55 @@ func getMergedParamsAndOpts(cfgs map[string]*Config, cmdName string, args []stri
 	return params, opts, nil
 }
 
-func (m *Main) initCommand(rootName string, dir string) (*app.App, *cobra.Command, error) {
+func (m *Main) initAppFromDir(dir string) (*app.App, error) {
 	ap, err := app.New(dir)
 	if err != nil {
 		ap.PrintError(err)
-		return nil, nil, err
+		return nil, err
 	}
 	ap.Stdout = m.Stdout
 	ap.Stderr = m.Stderr
 
-	jobs := map[string]app.JobSpec{}
-	jobs[rootName] = ap.Config.JobSpec
-	jobNames := []string{
-		rootName,
+	return ap, nil
+}
+
+func (m *Main) initAppFromFile(file string) (*app.App, error) {
+	ap, err := app.NewFromFile(file)
+	if err != nil {
+		ap.PrintError(err)
+		return nil, err
 	}
-	for _, j := range ap.Config.Jobs {
-		name := fmt.Sprintf("%s %s", rootName, j.Name)
+	ap.Stdout = m.Stdout
+	ap.Stderr = m.Stderr
+
+	return ap, nil
+}
+
+func (m *Main) initAppFromSource(cmd string, code []byte) (*app.App, error) {
+	ap, err := app.NewFromSources(map[string][]byte{cmd: code})
+	if err != nil {
+		ap.PrintError(err)
+		return nil, err
+	}
+	ap.Stdout = m.Stdout
+	ap.Stderr = m.Stderr
+
+	return ap, nil
+}
+
+func (m *Main) initCommand(ap *app.App, rootCmdName string) (*cobra.Command, error) {
+	jobs := map[string]app.JobSpec{}
+	jobNames := []string{}
+	for _, j := range ap.JobByName {
+		var name string
+		if j.Name == "" {
+			name = rootCmdName
+		} else {
+			name = fmt.Sprintf("%s %s", rootCmdName, j.Name)
+		}
+
 		jobs[name] = j
+
 		jobNames = append(jobNames, name)
 	}
 
@@ -286,7 +321,7 @@ func (m *Main) initCommand(rootName string, dir string) (*app.App, *cobra.Comman
 		}
 		cfg, err := configureCommand(cli, job)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		cfgs[name] = cfg
 		cli.RunE = func(cmd *cobra.Command, args []string) error {
@@ -295,7 +330,9 @@ func (m *Main) initCommand(rootName string, dir string) (*app.App, *cobra.Comman
 				return err
 			}
 			_, err = ap.Run(job.Name, params, opts)
-			cmd.SilenceUsage = true
+			if err != nil && err.Error() != app.NoRunMessage {
+				cmd.SilenceUsage = true
+			}
 			return err
 		}
 		commands[name] = cli
@@ -304,12 +341,36 @@ func (m *Main) initCommand(rootName string, dir string) (*app.App, *cobra.Comman
 		}
 	}
 
-	rootCmd := commands[rootName]
+	rootCmd := commands[rootCmdName]
 
-	return ap, rootCmd, nil
+	return rootCmd, nil
 }
 
 func (m Main) Run() error {
+	cmdNameFromEnv := m.Getenv("VARIANT_NAME")
+	if cmdNameFromEnv != "" {
+		m.Command = cmdNameFromEnv
+	}
+
+	if m.Source != nil {
+		return m.runSource(m.Command, m.Source)
+	}
+
+	if len(m.Args) > 1 {
+		file := m.Args[1]
+		info, err := os.Stat(file)
+		if err == nil && info != nil && !info.IsDir() {
+			cmdName := filepath.Base(file)
+			args := []string{cmdName}
+			if len(m.Args) > 2 {
+				args = append(args, m.Args[2:]...)
+			}
+			m.Args = args
+			m.Command = cmdName
+			return m.runFile(cmdName, file)
+		}
+	}
+
 	dirFromEnv := m.Getenv("VARIANT_DIR")
 
 	dir := dirFromEnv
@@ -322,21 +383,50 @@ func (m Main) Run() error {
 		}
 	}
 
-	rootName := m.Getenv("VARIANT_NAME")
+	return m.runDir(dir)
+}
 
+func (m Main) runDir(dir string) error {
 	var cmdName string
-	if rootName != "" {
-		cmdName = rootName
+	if m.Command != "" {
+		cmdName = m.Command
 	} else {
 		cmdName = "run"
 	}
 
-	ap, runRootCmd, err := m.initCommand(cmdName, dir)
+	ap, err := m.initAppFromDir(dir)
 	if err != nil {
 		return err
 	}
 
-	if rootName != "" {
+	return m.runApp(ap, cmdName)
+}
+
+func (m Main) runFile(asCmd, file string) error {
+	ap, err := m.initAppFromFile(file)
+	if err != nil {
+		return err
+	}
+
+	return m.runApp(ap, asCmd)
+}
+
+func (m Main) runSource(asCmd string, code []byte) error {
+	ap, err := m.initAppFromSource(asCmd, code)
+	if err != nil {
+		return err
+	}
+
+	return m.runApp(ap, asCmd)
+}
+
+func (m Main) runApp(ap *app.App, cmdName string) error {
+	runRootCmd, err := m.initCommand(ap, cmdName)
+	if err != nil {
+		return err
+	}
+
+	if m.Command != "" {
 		runRootCmd.SetArgs(m.Args[1:])
 		return runRootCmd.Execute()
 	}
@@ -362,7 +452,7 @@ func (m Main) Run() error {
 		},
 	}
 	exportCmd := &cobra.Command{
-		Use: "export SUBCOMMAND SRC_DIR OUTPUT_PATH",
+		Use:   "export SUBCOMMAND SRC_DIR OUTPUT_PATH",
 		Short: "Export the Variant command defined in SRC_DIR to OUTPUT_PATH",
 	}
 	shimCmd := &cobra.Command{
