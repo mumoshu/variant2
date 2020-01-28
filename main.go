@@ -34,8 +34,8 @@ func main() {
 		Getenv: os.Getenv,
 		Getwd:  os.Getwd,
 	}
-	err := m.Run()
-	if err != nil {
+
+	if err := m.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v", err)
 		os.Exit(1)
 	}
@@ -46,128 +46,126 @@ type Config struct {
 	Options    func() map[string]func() interface{}
 }
 
+func valueOnChange(cli *cobra.Command, name string, v interface{}, def interface{}) func() interface{} {
+	return func() interface{} {
+		// This avoids setting "" when the flag is actually missing, so that
+		// we can differentiate between when (1)an empty string is specified vs (2)no flag is provided.
+		if cli.PersistentFlags().Lookup(name).Changed {
+			return v
+		}
+
+		return def
+	}
+}
+
 func configureCommand(cli *cobra.Command, root app.JobSpec) (*Config, error) {
-	options := map[string]interface{}{}
-	optionFeeds := map[string]func() interface{}{}
+	lazyOptionValues := map[string]func() interface{}{}
+
 	for i := range root.Options {
 		o := root.Options[i]
+
 		var tpe cty.Type
+
 		tpe, diags := typeexpr.TypeConstraint(o.Type)
 		if diags != nil {
 			return nil, diags
 		}
+
 		var desc string
+
 		if o.Description != nil {
 			desc = *o.Description
 		}
+
 		switch tpe {
 		case cty.String:
 			var v string
+
 			if o.Short != nil {
 				cli.PersistentFlags().StringVarP(&v, o.Name, *o.Short, "", desc)
 			} else {
 				cli.PersistentFlags().StringVar(&v, o.Name, "", desc)
 			}
-			options[o.Name] = &v
-			optionFeeds[o.Name] = func() interface{} {
-				// This avoids setting "" when the flag is actually missing, so that
-				// we can differentiate between when (1)an empty string is specified vs (2)no flag is provided.
-				if cli.PersistentFlags().Lookup(o.Name).Changed {
-					return v
-				}
-				return nil
-			}
+
+			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v, nil)
 		case cty.Bool:
 			var v bool
+
 			if o.Short != nil {
 				cli.PersistentFlags().BoolVarP(&v, o.Name, *o.Short, false, desc)
 			} else {
 				cli.PersistentFlags().BoolVar(&v, o.Name, false, desc)
 			}
-			options[o.Name] = &v
-			optionFeeds[o.Name] = func() interface{} {
-				// This avoids setting "" when the flag is actually missing, so that
-				// we can differentiate between when (1)an empty string is specified vs (2)no flag is provided.
-				if cli.PersistentFlags().Lookup(o.Name).Changed {
-					return v
-				}
-				return v
-			}
+
+			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v, &v)
 		case cty.Number:
 			var v int
+
 			if o.Short != nil {
 				cli.PersistentFlags().IntVarP(&v, o.Name, *o.Short, 0, desc)
 			} else {
 				cli.PersistentFlags().IntVar(&v, o.Name, 0, desc)
 			}
-			options[o.Name] = &v
-			optionFeeds[o.Name] = func() interface{} {
-				// This avoids setting "" when the flag is actually missing, so that
-				// we can differentiate between when (1)an empty string is specified vs (2)no flag is provided.
-				if cli.PersistentFlags().Lookup(o.Name).Changed {
-					return v
-				}
-				return v
-			}
+
+			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v, &v)
 		case cty.List(cty.String):
 			v := []string{}
+
 			if o.Short != nil {
 				cli.PersistentFlags().StringSliceVarP(&v, o.Name, *o.Short, []string{}, desc)
 			} else {
 				cli.PersistentFlags().StringSliceVar(&v, o.Name, []string{}, desc)
 			}
-			options[o.Name] = &v
-			optionFeeds[o.Name] = func() interface{} {
-				// This avoids setting "" when the flag is actually missing, so that
-				// we can differentiate between when (1)an empty string is specified vs (2)no flag is provided.
-				if cli.PersistentFlags().Lookup(o.Name).Changed {
-					return v
-				}
-				return v
-			}
+
+			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v, &v)
 		case cty.List(cty.Number):
 			v := []int{}
+
 			if o.Short != nil {
 				cli.PersistentFlags().IntSliceVarP(&v, o.Name, *o.Short, []int{}, desc)
 			} else {
 				cli.PersistentFlags().IntSliceVar(&v, o.Name, []int{}, desc)
 			}
-			options[o.Name] = &v
-			optionFeeds[o.Name] = func() interface{} {
-				// This avoids setting "" when the flag is actually missing, so that
-				// we can differentiate between when (1)an empty string is specified vs (2)no flag is provided.
-				if cli.PersistentFlags().Lookup(o.Name).Changed {
-					return v
-				}
-				return v
-			}
+
+			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v, &v)
 		}
+
 		if o.Default.Range().Start != o.Default.Range().End {
 
-		} else {
-			cli.MarkPersistentFlagRequired(o.Name)
+		} else if err := cli.MarkPersistentFlagRequired(o.Name); err != nil {
+			panic(err)
 		}
 	}
+
 	var minArgs int
+
 	var maxArgs int
-	paramFeeds := map[string]func(args []string) (interface{}, error){}
+
+	lazyParamValues := map[string]func(args []string) (interface{}, error){}
+
 	for i := range root.Parameters {
-		maxArgs += 1
+		maxArgs++
+
 		p := root.Parameters[i]
 		r := p.Default.Range()
+
 		if r.Start == r.End {
-			minArgs += 1
+			minArgs++
 		}
+
 		ii := i
-		paramFeeds[p.Name] = func(args []string) (interface{}, error) {
+		lazyParamValues[p.Name] = func(args []string) (interface{}, error) {
 			if len(args) <= ii {
 				return nil, nil
 			}
+
 			v := args[ii]
 			ty, err := typeexpr.TypeConstraint(p.Type)
+
 			if err != nil {
 				return nil, err
 			}
+
 			switch ty {
 			case cty.Bool:
 				return strconv.ParseBool(v)
@@ -176,53 +174,66 @@ func configureCommand(cli *cobra.Command, root app.JobSpec) (*Config, error) {
 			case cty.Number:
 				return strconv.Atoi(v)
 			}
+
 			return nil, fmt.Errorf("unexpected type of arg at %d: value=%v, type=%T", ii, v, v)
 		}
 	}
+
 	cli.Args = cobra.RangeArgs(minArgs, maxArgs)
 	params := func(args []string) (map[string]interface{}, error) {
 		m := map[string]interface{}{}
-		for name, f := range paramFeeds {
+
+		for name, f := range lazyParamValues {
 			v, err := f(args)
 			if err != nil {
 				return nil, err
 			}
+
 			m[name] = v
 		}
+
 		return m, nil
 	}
 	opts := func() map[string]func() interface{} {
 		m := map[string]func() interface{}{}
-		for name, f := range optionFeeds {
+		for name, f := range lazyOptionValues {
 			m[name] = f
 		}
+
 		return m
 	}
+
 	return &Config{Parameters: params, Options: opts}, nil
 }
 
-func getMergedParamsAndOpts(cfgs map[string]*Config, cmdName string, args []string) (map[string]interface{}, map[string]interface{}, error) {
+func getMergedParamsAndOpts(
+	cfgs map[string]*Config, cmdName string, args []string) (map[string]interface{}, map[string]interface{}, error) {
 	names := strings.Split(cmdName, " ")
 	optGetters := map[string]func() interface{}{}
+
 	for i := range names {
 		curName := strings.Join(names[:i+1], " ")
-		curCfg, ok := cfgs[curName]
-		if ok {
+		if curCfg, ok := cfgs[curName]; ok {
 			curOpts := curCfg.Options()
 			for n := range curOpts {
 				optGetters[n] = curOpts[n]
 			}
 		}
 	}
+
 	cfg := cfgs[cmdName]
 	params, err := cfg.Parameters(args)
+
 	if err != nil {
 		return nil, nil, err
 	}
+
 	opts := map[string]interface{}{}
+
 	for n, get := range optGetters {
 		opts[n] = get()
 	}
+
 	return params, opts, nil
 }
 
@@ -232,6 +243,7 @@ func (m *Main) initAppFromDir(dir string) (*app.App, error) {
 		ap.PrintError(err)
 		return nil, err
 	}
+
 	ap.Stdout = m.Stdout
 	ap.Stderr = m.Stderr
 
@@ -244,6 +256,7 @@ func (m *Main) initAppFromFile(file string) (*app.App, error) {
 		ap.PrintError(err)
 		return nil, err
 	}
+
 	ap.Stdout = m.Stdout
 	ap.Stderr = m.Stderr
 
@@ -256,6 +269,7 @@ func (m *Main) initAppFromSource(cmd string, code []byte) (*app.App, error) {
 		ap.PrintError(err)
 		return nil, err
 	}
+
 	ap.Stdout = m.Stdout
 	ap.Stderr = m.Stderr
 
@@ -265,6 +279,7 @@ func (m *Main) initAppFromSource(cmd string, code []byte) (*app.App, error) {
 func (m *Main) initCommand(ap *app.App, rootCmdName string) (*cobra.Command, error) {
 	jobs := map[string]app.JobSpec{}
 	jobNames := []string{}
+
 	for _, j := range ap.JobByName {
 		var name string
 		if j.Name == "" {
@@ -287,18 +302,24 @@ func (m *Main) initCommand(ap *app.App, rootCmdName string) (*cobra.Command, err
 		name := n
 		job := jobs[name]
 		names := strings.Split(name, " ")
+
 		var parent *cobra.Command
+
 		cmdName := names[len(names)-1]
+
 		switch len(names) {
 		case 1:
 		default:
 			names = names[:len(names)-1]
+
 			var ok bool
+
 			parent, ok = commands[strings.Join(names, " ")]
 			if !ok {
 				for i := range names {
 					intName := strings.Join(names[:i+1], " ")
 					cur, ok := commands[intName]
+
 					if !ok {
 						cur = &cobra.Command{
 							Use: names[i],
@@ -306,36 +327,45 @@ func (m *Main) initCommand(ap *app.App, rootCmdName string) (*cobra.Command, err
 						parent.AddCommand(cur)
 						commands[intName] = cur
 					}
+
 					parent = cur
 				}
 			}
 		}
+
 		var desc string
+
 		if job.Description != nil {
 			desc = *job.Description
 		}
+
 		cli := &cobra.Command{
 			Use:   cmdName,
 			Short: strings.Split(desc, "\n")[0],
 			Long:  desc,
 		}
 		cfg, err := configureCommand(cli, job)
+
 		if err != nil {
 			return nil, err
 		}
+
 		cfgs[name] = cfg
 		cli.RunE = func(cmd *cobra.Command, args []string) error {
 			params, opts, err := getMergedParamsAndOpts(cfgs, name, args)
 			if err != nil {
 				return err
 			}
+
 			_, err = ap.Run(job.Name, params, opts)
 			if err != nil && err.Error() != app.NoRunMessage {
 				cmd.SilenceUsage = true
 			}
+
 			return err
 		}
 		commands[name] = cli
+
 		if parent != nil {
 			parent.AddCommand(cli)
 		}
@@ -359,14 +389,18 @@ func (m Main) Run() error {
 	if len(m.Args) > 1 {
 		file := m.Args[1]
 		info, err := os.Stat(file)
+
 		if err == nil && info != nil && !info.IsDir() {
 			cmdName := filepath.Base(file)
 			args := []string{cmdName}
+
 			if len(m.Args) > 2 {
 				args = append(args, m.Args[2:]...)
 			}
+
 			m.Args = args
 			m.Command = cmdName
+
 			return m.runFile(cmdName, file)
 		}
 	}
@@ -377,7 +411,9 @@ func (m Main) Run() error {
 
 	if dir == "" {
 		var err error
+
 		dir, err = m.Getwd()
+
 		if err != nil {
 			return err
 		}
@@ -494,5 +530,6 @@ func (m Main) runApp(ap *app.App, cmdName string) error {
 	rootCmd.AddCommand(exportCmd)
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.SetArgs(m.Args[1:])
+
 	return rootCmd.Execute()
 }

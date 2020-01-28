@@ -17,5 +17,6 @@ require (
 	github.com/variantdev/vals v0.0.0-20191123083656-fc61ba6e8746
 	github.com/zclconf/go-cty v1.2.0
 	github.com/zclconf/go-cty-yaml v1.0.1
+	gopkg.in/yaml.v2 v2.2.2
 	gopkg.in/yaml.v3 v3.0.0-20190924164351-c8b7dadae555
 )

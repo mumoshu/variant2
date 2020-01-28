@@ -117,6 +117,6 @@ func Functions(baseDir string) map[string]function.Function {
 		"try":              tryfunc.TryFunc,
 		"can":              tryfunc.CanFunc,
 		"convert":          typeexpr.ConvertFunc,
-		"jsonpath":         JsonPathFunc,
+		"jsonpath":         JSONPathFunc,
 	}
 }

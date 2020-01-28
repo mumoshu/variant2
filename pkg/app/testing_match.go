@@ -1,5 +1,6 @@
 // Copied from go/1.13.4/libexec/src/testing/match.go
 
+//nolint
 package app
 
 import "strconv"
@@ -40,4 +41,3 @@ func isSpace(r rune) bool {
 	}
 	return false
 }
-

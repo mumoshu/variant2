@@ -16,10 +16,12 @@ func FindVariantFiles(path string) ([]string, error) {
 		files []string
 		err   error
 	)
+
 	fi, err := os.Stat(path)
 	if err != nil {
 		return files, err
 	}
+
 	if fi.IsDir() {
 		found, err := filepath.Glob(filepath.Join(path, "*"+VariantFileExt))
 		if err != nil {
@@ -28,20 +30,25 @@ func FindVariantFiles(path string) ([]string, error) {
 
 		for _, f := range found {
 			info, err := os.Stat(f)
+
 			if err != nil {
 				return nil, err
 			}
+
 			if info.IsDir() {
 				continue
 			}
+
 			files = append(files, f)
 		}
 
 		return files, nil
 	}
+
 	switch filepath.Ext(path) {
 	case VariantFileExt:
 		files = append(files, path)
 	}
+
 	return files, err
 }

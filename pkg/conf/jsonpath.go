@@ -14,16 +14,19 @@ func getValueAtJSONPath(data, path string) (cty.Value, error) {
 	if !result.Exists() {
 		return cty.NullVal(cty.String), fmt.Errorf("no value found at jsonpath %q: not found", path)
 	}
+
 	raw := []byte(result.Raw)
+
 	ty, err := ctyjson.ImpliedType(raw)
 	if err != nil {
 		return cty.DynamicVal, err
 	}
+
 	return ctyjson.Unmarshal(raw, ty)
 }
 
-// fn.Call([]cty.Value{query})
-var JsonPathFunc = function.New(&function.Spec{
+// JSONPathFunc takes JSON and a query to fetch the value for the query
+var JSONPathFunc = function.New(&function.Spec{
 	Params: []function.Parameter{
 		{
 			Name: "data",

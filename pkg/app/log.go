@@ -32,12 +32,15 @@ func (evt Event) toCty() cty.Value {
 		"type": cty.StringVal(evt.Type),
 	}
 	m["time"] = cty.StringVal(evt.Time.Format(time.RFC3339))
+
 	if evt.Run != nil {
 		m["run"] = evt.Run.toCty()
 	}
+
 	if evt.Exec != nil {
 		m["exec"] = evt.Exec.toCty()
 	}
+
 	return cty.ObjectVal(m)
 }
 
@@ -46,6 +49,7 @@ func (e *RunEvent) toCty() cty.Value {
 	if err != nil {
 		panic(err)
 	}
+
 	return cty.ObjectVal(map[string]cty.Value{
 		"job":  cty.StringVal(e.Job),
 		"args": args,
@@ -56,13 +60,16 @@ func goToCty(goV interface{}) (cty.Value, error) {
 	switch typed := goV.(type) {
 	case map[string]interface{}:
 		m := map[string]cty.Value{}
+
 		for k, v := range typed {
 			var err error
+
 			m[k], err = goToCty(v)
 			if err != nil {
 				return cty.DynamicVal, err
 			}
 		}
+
 		return cty.MapVal(m), nil
 	case string:
 		return cty.StringVal(typed), nil
@@ -80,6 +87,7 @@ func (e *ExecEvent) toCty() cty.Value {
 	for _, a := range e.Args {
 		vals = append(vals, cty.StringVal(a))
 	}
+
 	return cty.ObjectVal(map[string]cty.Value{
 		"command": cty.StringVal(e.Command),
 		"args":    cty.ListVal(vals),
@@ -131,6 +139,7 @@ func (l *EventLogger) append(evt Event) error {
 
 	l.collectorsMutex.Lock()
 	defer l.collectorsMutex.Unlock()
+
 	for _, c := range l.collectors {
 		if err := c.Collect(evt); err != nil {
 			return err
@@ -147,19 +156,23 @@ func (l *EventLogger) Register(logCollector LogCollector) func() error {
 	l.collectorsMutex.Lock()
 	l.collectors[id] = &logCollector
 	l.collectorsMutex.Unlock()
+
 	return func() error {
 		defer func() {
 			l.collectorsMutex.Lock()
 			delete(l.collectors, id)
 			l.collectorsMutex.Unlock()
 		}()
+
 		var file string
+
 		if logCollector.FilePath == "" {
 			tmpFile, _ := ioutil.TempFile("", "tmp")
 			file = tmpFile.Name()
 		} else {
 			file = logCollector.FilePath
 		}
+
 		if err := ioutil.WriteFile(file, []byte(strings.Join(logCollector.lines, "\n")), 0644); err != nil {
 			return err
 		}
@@ -191,6 +204,7 @@ func (c *LogCollector) Collect(evt Event) error {
 		if c.lines == nil {
 			c.lines = []string{}
 		}
+
 		c.lines = append(c.lines, *text)
 	}
 

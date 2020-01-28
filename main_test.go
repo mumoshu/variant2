@@ -168,21 +168,19 @@ func TestExamples(t *testing.T) {
 			}()
 
 			buf := new(bytes.Buffer)
-			buf.ReadFrom(outRead)
+			if _, err := buf.ReadFrom(outRead); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			out := buf.String()
 
 			if tc.expectErr != "" {
 				if err == nil {
 					t.Fatalf("Expected error didn't occur")
-				} else {
-					if err.Error() != tc.expectErr {
-						t.Fatalf("Unexpected error: want %q, got %q", tc.expectErr, err.Error())
-					}
+				} else if err.Error() != tc.expectErr {
+					t.Fatalf("Unexpected error: want %q, got %q", tc.expectErr, err.Error())
 				}
-			} else {
-				if err != nil {
-					t.Fatalf("%+v", err)
-				}
+			} else if err != nil {
+				t.Fatalf("%+v", err)
 			}
 
 			if tc.expectOut != "" {
@@ -246,21 +244,19 @@ func TestExport(t *testing.T) {
 			}()
 
 			buf := new(bytes.Buffer)
-			buf.ReadFrom(outRead)
+			if _, err := buf.ReadFrom(outRead); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			out := buf.String()
 
 			if tc.expectErr != "" {
 				if err == nil {
 					t.Fatalf("Expected error didn't occur")
-				} else {
-					if err.Error() != tc.expectErr {
-						t.Fatalf("Unexpected error: want %q, got %q", tc.expectErr, err.Error())
-					}
+				} else if err.Error() != tc.expectErr {
+					t.Fatalf("Unexpected error: want %q, got %q", tc.expectErr, err.Error())
 				}
-			} else {
-				if err != nil {
-					t.Fatalf("%+v", err)
-				}
+			} else if err != nil {
+				t.Fatalf("%+v", err)
 			}
 
 			if tc.expectOut != "" {
@@ -289,7 +285,9 @@ func TestExec(t *testing.T) {
 	}{
 		{
 			subject: "shebang_test",
-			testCmd: []string{"./test/shebang/myapp/myapp", "test", "--int1", "1", "--ints1", "1,2", "--str1", "a", "--strs1", "b,c"},
+			testCmd: []string{
+				"./test/shebang/myapp/myapp", "test", "--int1", "1", "--ints1", "1,2", "--str1", "a", "--strs1", "b,c",
+			},
 			out: `1 1 2 a b|c
 `,
 		},
@@ -297,7 +295,7 @@ func TestExec(t *testing.T) {
 			subject: "shebang_test_usage",
 			testCmd: []string{"./test/shebang/myapp/myapp", "test"},
 			err:     `exit status 1`,
-			out:     `Error: required flag(s) "int1", "ints1", "str1", "strs1" not set
+			out: `Error: required flag(s) "int1", "ints1", "str1", "strs1" not set
 Usage:
   myapp test [flags]
 
@@ -316,7 +314,7 @@ Error: required flag(s) "int1", "ints1", "str1", "strs1" not set`,
 			subject: "shebang_usage",
 			testCmd: []string{"./test/shebang/myapp/myapp"},
 			err:     `exit status 1`,
-			out:     `Error: required flag(s) "int1", "ints1", "str1", "strs1" not set
+			out: `Error: required flag(s) "int1", "ints1", "str1", "strs1" not set
 Usage:
   myapp [flags]
   myapp [command]

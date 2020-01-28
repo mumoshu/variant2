@@ -7,6 +7,8 @@
 // Package testlog provides a back-channel communication path
 // between tests and package os, so that cmd/go can see which
 // environment variables and files a test consults.
+
+//nolint
 package app
 
 import "sync/atomic"

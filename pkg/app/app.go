@@ -3,7 +3,18 @@ package app
 import (
 	"flag"
 	"fmt"
-	"github.com/hashicorp/go-multierror"
+	"io"
+	"io/ioutil"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime/debug"
+	"sort"
+	"strings"
+	"sync"
+	"testing"
+
+	multierror "github.com/hashicorp/go-multierror"
 	hcl2 "github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	gohcl2 "github.com/hashicorp/hcl/v2/gohcl"
@@ -18,17 +29,7 @@ import (
 	ctyyaml "github.com/zclconf/go-cty-yaml"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
-	"gopkg.in/yaml.v3"
-	"io"
-	"io/ioutil"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime/debug"
-	"sort"
-	"strings"
-	"sync"
-	"testing"
+	yaml "gopkg.in/yaml.v2"
 )
 
 const NoRunMessage = "nothing to run"
@@ -49,6 +50,7 @@ func (l hcl2Loader) loadFile(filenames ...string) (*configurable, map[string]*hc
 		if err != nil {
 			return nil, nil, err
 		}
+
 		srcs[filename] = src
 	}
 
@@ -57,17 +59,22 @@ func (l hcl2Loader) loadFile(filenames ...string) (*configurable, map[string]*hc
 
 func (l hcl2Loader) loadSources(srcs map[string][]byte) (*configurable, map[string]*hcl2.File, error) {
 	nameToFiles := map[string]*hcl2.File{}
+
 	var files []*hcl2.File
+
 	var diags hcl2.Diagnostics
 
 	for filename, src := range srcs {
 		var f *hcl2.File
+
 		var ds hcl2.Diagnostics
+
 		if strings.HasSuffix(filename, ".json") {
 			f, ds = l.Parser.ParseJSON(src, filename)
 		} else {
 			f, ds = l.Parser.ParseHCL(src, filename)
 		}
+
 		nameToFiles[filename] = f
 		files = append(files, f)
 		diags = append(diags, ds...)
@@ -252,11 +259,6 @@ func (t *configurable) HCL2Config() (*HCL2Config, error) {
 
 	diags := gohcl2.DecodeBody(t.Body, ctx, config)
 	if diags.HasErrors() {
-		// We return the diags as an implementation of error, which the
-		// caller than then type-assert if desired to recover the individual
-		// diagnostics.
-		// FIXME: The current API gives us no way to return warnings in the
-		// absence of any errors.
 		return config, diags
 	}
 
@@ -276,7 +278,7 @@ type App struct {
 }
 
 func New(dir string) (*App, error) {
-	nameToFiles, _, cc, err := newConfigFromDir(dir)
+	nameToFiles, cc, err := newConfigFromDir(dir)
 
 	app := &App{
 		Files: nameToFiles,
@@ -290,7 +292,7 @@ func New(dir string) (*App, error) {
 }
 
 func NewFromFile(file string) (*App, error) {
-	nameToFiles, _, cc, err := newConfigFromFiles([]string{file})
+	nameToFiles, cc, err := newConfigFromFiles([]string{file})
 
 	app := &App{
 		Files: nameToFiles,
@@ -319,43 +321,35 @@ func NewFromSources(srcs map[string][]byte) (*App, error) {
 	return newApp(app, cc, "", false)
 }
 
-func newConfigFromDir(dir string) (map[string]*hcl2.File, hcl2.Body, *HCL2Config, error) {
+func newConfigFromDir(dir string) (map[string]*hcl2.File, *HCL2Config, error) {
 	files, err := conf.FindVariantFiles(dir)
 	if err != nil {
-		return map[string]*hcl2.File{}, nil, nil, fmt.Errorf("failed to get %s files: %v", conf.VariantFileExt, err)
+		return map[string]*hcl2.File{}, nil, fmt.Errorf("failed to get %s files: %v", conf.VariantFileExt, err)
 	}
 
 	return newConfigFromFiles(files)
 }
 
-func newConfigFromFiles(files []string) (map[string]*hcl2.File, hcl2.Body, *HCL2Config, error) {
+func newConfigFromFiles(files []string) (map[string]*hcl2.File, *HCL2Config, error) {
 	l := &hcl2Loader{
 		Parser: hcl2parse.NewParser(),
 	}
 
-	nameToFiles := map[string]*hcl2.File{}
-
 	c, nameToFiles, err := l.loadFile(files...)
 
 	if err != nil {
-		var body hcl2.Body
-		if c != nil {
-			body = c.Body
-		}
-		return nameToFiles, body, nil, err
+		return nameToFiles, nil, err
 	}
 
 	cc, err := c.HCL2Config()
 
-	return nameToFiles, c.Body, cc, err
+	return nameToFiles, cc, err
 }
 
 func newConfigFromSources(srcs map[string][]byte) (map[string]*hcl2.File, hcl2.Body, *HCL2Config, error) {
 	l := &hcl2Loader{
 		Parser: hcl2parse.NewParser(),
 	}
-
-	nameToFiles := map[string]*hcl2.File{}
 
 	c, nameToFiles, err := l.loadSources(srcs)
 
@@ -364,6 +358,7 @@ func newConfigFromSources(srcs map[string][]byte) (map[string]*hcl2.File, hcl2.B
 		if c != nil {
 			body = c.Body
 		}
+
 		return nameToFiles, body, nil, err
 	}
 
@@ -388,6 +383,7 @@ func newApp(app *App, cc *HCL2Config, importBaseDir string, enableImports bool) 
 
 			d := filepath.Join(importBaseDir, *j.Import)
 			a, err := New(d)
+
 			if err != nil {
 				return nil, err
 			}
@@ -400,6 +396,7 @@ func newApp(app *App, cc *HCL2Config, importBaseDir string, enableImports bool) 
 				} else {
 					newJobName = fmt.Sprintf("%s %s", j.Name, importedJob.Name)
 				}
+
 				jobByName[newJobName] = importedJob
 
 				if j.Name == "" && importedJob.Name == "" {
@@ -412,6 +409,7 @@ func newApp(app *App, cc *HCL2Config, importBaseDir string, enableImports bool) 
 	if conf == nil {
 		conf = cc
 	}
+
 	app.Config = conf
 
 	app.JobByName = jobByName
@@ -434,7 +432,9 @@ func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opt
 			panic(fmt.Errorf("command %q not found", cmd))
 		}
 	}
+
 	jobCtx, err := createJobContext(cc, j, args, opts)
+
 	if err != nil {
 		app.PrintError(err)
 		return nil, err
@@ -446,110 +446,54 @@ func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opt
 
 	if j.Log != nil && j.Log.Collects != nil && j.Log.Forwards != nil && len(j.Log.Forwards) > 0 {
 		var file string
+
 		if j.Log.File.Range().Start != j.Log.File.Range().End {
 			if diags := gohcl2.DecodeExpression(j.Log.File, jobCtx, &file); diags.HasErrors() {
 				return nil, diags
 			}
 		}
-		logCollector := LogCollector{
-			FilePath: file,
-			CollectFn: func(evt Event) (*string, bool, error) {
-				condVars := map[string]cty.Value{}
-				for k, v := range jobCtx.Variables {
-					condVars[k] = v
-				}
-				condVars["event"] = evt.toCty()
-				condCtx := jobCtx
-				condCtx.Variables = condVars
 
-				for _, c := range j.Log.Collects {
-					var condVal cty.Value
-					if diags := gohcl2.DecodeExpression(c.Condition, condCtx, &condVal); diags.HasErrors() {
-						return nil, false, diags
-					}
-					vv, err := ctyToGo(condVal)
-					if err != nil {
-						return nil, false, err
-					}
-
-					b, ok := vv.(bool)
-					if !ok {
-						return nil, false, fmt.Errorf("unexpected type of condition value: want bool, got %T", vv)
-					}
-
-					if !b {
-						continue
-					}
-
-					formatVars := map[string]cty.Value{}
-					for k, v := range jobCtx.Variables {
-						formatVars[k] = v
-					}
-					formatVars["event"] = evt.toCty()
-					formatCtx := jobCtx
-					formatCtx.Variables = condVars
-
-					var formatVal cty.Value
-					if diags := gohcl2.DecodeExpression(c.Format, formatCtx, &formatVal); diags.HasErrors() {
-						return nil, false, diags
-					}
-					formatV, err := ctyToGo(formatVal)
-					if err != nil {
-						return nil, false, err
-					}
-					f, ok := formatV.(string)
-					if !ok {
-						return nil, false, fmt.Errorf("unexpected type of format value: want string, got %T", f)
-					}
-
-					return &f, true, nil
-				}
-
-				return nil, false, nil
-			},
-			ForwardFn: func(log Log) error {
-				logCty := cty.MapVal(map[string]cty.Value{
-					"file": cty.StringVal(log.File),
-				})
-				jobCtx.Variables["log"] = logCty
-
-				for _, f := range j.Log.Forwards {
-					_, err := app.execRunInternal(nil, jobCtx, f.Run)
-					if err != nil {
-						return err
-					}
-				}
-				return nil
-			},
-		}
+		logCollector := app.newLogCollector(file, j, jobCtx)
 		unregister := l.Register(logCollector)
-		defer unregister()
+
+		defer func() {
+			if err := unregister(); err != nil {
+				panic(err)
+			}
+		}()
 	}
 
 	conf, err := app.getConfigs(jobCtx, cc, j, "config", func(j JobSpec) []Config { return j.Configs }, nil)
 	if err != nil {
 		return nil, err
 	}
+
 	jobCtx.Variables["conf"] = conf
 
 	secretRefsEvaluator, err := vals.New(vals.Options{CacheSize: 100})
 	if err != nil {
-		return nil, fmt.Errorf("Failed to initialize vals: %v", err)
+		return nil, fmt.Errorf("failed to initialize vals: %v", err)
 	}
+
 	sec, err := app.getConfigs(jobCtx, cc, j, "secret", func(j JobSpec) []Config { return j.Secrets }, func(m map[string]interface{}) (map[string]interface{}, error) {
 		return secretRefsEvaluator.Eval(m)
 	})
+
 	if err != nil {
 		return nil, err
 	}
+
 	jobCtx.Variables["sec"] = sec
 
 	needs := map[string]cty.Value{}
+
 	var concurrency int
+
 	if !IsExpressionEmpty(j.Concurrency) {
 		if err := gohcl2.DecodeExpression(j.Concurrency, jobCtx, &concurrency); err != nil {
 			return nil, err
 		}
+
 		if concurrency < 1 {
 			return nil, fmt.Errorf("concurrency less than 1 can not be set. If you wanted %d for a concurrency equals to the number of steps, is isn't a good idea. Some system has a relatively lower fd limit that can make your command fail only when there are too many steps. Always use static number of concurrency", concurrency)
 		}
@@ -580,7 +524,9 @@ func (app *App) WriteDiags(diagnostics hcl2.Diagnostics) {
 		100,       // wrapping width
 		true,      // generate colored/highlighted output
 	)
-	wr.WriteDiagnostics(diagnostics)
+	if err := wr.WriteDiagnostics(diagnostics); err != nil {
+		panic(err)
+	}
 }
 
 func (app *App) ExitWithError(err error) {
@@ -624,7 +570,6 @@ func (app *App) execCmd(cmd string, args []string, env map[string]string, log bo
 		}
 	}
 
-	// TODO exec with the runner
 	res, err := sh.Capture(shellCmd, opts)
 
 	re := &Result{
@@ -632,6 +577,7 @@ func (app *App) execCmd(cmd string, args []string, env map[string]string, log bo
 		Stderr: res.Stderr,
 	}
 
+	//nolint
 	switch e := err.(type) {
 	case *exec.ExitError:
 		re.ExitStatus = e.ExitCode()
@@ -650,11 +596,15 @@ func (app *App) sanitize(str string) string {
 
 func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Result, error) {
 	var res *Result
+
 	var err error
 
 	var cmd string
+
 	var args []string
+
 	var env map[string]string
+
 	if j.Exec != nil {
 		if diags := gohcl2.DecodeExpression(j.Exec.Command, ctx, &cmd); diags.HasErrors() {
 			return nil, diags
@@ -669,7 +619,9 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 		}
 
 		res, err = app.execCmd(cmd, args, env, true)
-		l.LogExec(cmd, args)
+		if err := l.LogExec(cmd, args); err != nil {
+			return nil, err
+		}
 	} else if j.Run != nil {
 		res, err = app.execRun(l, ctx, j.Run, new(sync.Mutex))
 	} else if j.Assert != nil {
@@ -711,14 +663,17 @@ func (app *App) execAssert(ctx *hcl2.EvalContext, a Assert) error {
 
 		start := cond.Range().Start.Byte
 		b, err := ioutil.ReadAll(fp)
+
 		if err != nil {
 			panic(err)
 		}
+
 		last := cond.Range().End.Byte + 1
 		expr := b[start:last]
 
 		traversals := cond.Variables()
 		vars := []string{}
+
 		for _, t := range traversals {
 			ctyValue, err := t.TraverseAbs(ctx)
 			if err == nil {
@@ -726,8 +681,9 @@ func (app *App) execAssert(ctx *hcl2.EvalContext, a Assert) error {
 				if err != nil {
 					panic(err)
 				}
+
 				src := strings.TrimSpace(string(b[t.SourceRange().Start.Byte:t.SourceRange().End.Byte]))
-				vars = append(vars, fmt.Sprintf("%s=%v (%T)", string(src), v, v))
+				vars = append(vars, fmt.Sprintf("%s=%v (%T)", src, v, v))
 			}
 		}
 
@@ -746,41 +702,51 @@ func failOnPanic(t *testing.T) {
 }
 func (app *App) RunTests(pat string) (*Result, error) {
 	var res *Result
+
 	var suite []testing.InternalTest
+
 	for i := range app.Config.Tests {
 		test := app.Config.Tests[i]
+
 		suite = append(suite, testing.InternalTest{
 			Name: rewrite(test.Name),
 			F: func(t *testing.T) {
 				defer failOnPanic(t)
-				var err error
-				res, err = app.execTest(t, test)
-				if err != nil {
-					t.Fatalf("%v", err)
-				}
+				app.execTest(t, test)
 			},
 		})
 	}
+
 	main := testing.MainStart(TestDeps{}, suite, nil, nil)
-	flag.Set("test.run", rewrite(pat))
+
+	if err := flag.Set("test.run", rewrite(pat)); err != nil {
+		panic(err)
+	}
 	// Avoid error like this:
 	//   testing: can't write /var/folders/lx/53d8_kgd26vf5_drrg89wkvc0000gp/T/go-build584494014/b001/testlog.txt: close /var/folders/lx/53d8_kgd26vf5_drrg89wkvc0000gp/T/go-build584494014/b001/testlog.txt: file already closed
-	flag.Set("test.testlogfile", "")
+	if err := flag.Set("test.testlogfile", ""); err != nil {
+		panic(err)
+	}
+
 	code := main.Run()
 	if code != 0 {
 		return nil, fmt.Errorf("test exited with code %d", code)
 	}
+
 	return res, nil
 }
 
-func (app *App) execTest(t *testing.T, test Test) (*Result, error) {
+func (app *App) execTest(t *testing.T, test Test) *Result {
 	var cases []Case
+
 	if len(test.Cases) == 0 {
-		cases = []Case{Case{}}
+		cases = []Case{{}}
 	} else {
 		cases = test.Cases
 	}
+
 	var res *Result
+
 	for i := range cases {
 		c := cases[i]
 		t.Run(c.Name, func(t *testing.T) {
@@ -792,7 +758,8 @@ func (app *App) execTest(t *testing.T, test Test) (*Result, error) {
 			}
 		})
 	}
-	return res, nil
+
+	return res
 }
 
 func (app *App) execTestCase(t Test, c Case) (*Result, error) {
@@ -811,13 +778,16 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 	ctx.Variables["var"] = vars
 
 	caseFields := map[string]cty.Value{}
+
 	for k, expr := range c.Args {
 		var v cty.Value
 		if diags := gohcl2.DecodeExpression(expr, ctx, &v); diags.HasErrors() {
 			return nil, diags
 		}
+
 		caseFields[k] = v
 	}
+
 	caseVal := cty.ObjectVal(caseFields)
 	ctx.Variables["case"] = caseVal
 
@@ -830,16 +800,21 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 	// If there are one ore more assert(s), do not fail immediately and let the assertion(s) decide
 	if t.Assert != nil && len(t.Assert) > 0 {
 		var lines []string
+
 		for _, a := range t.Assert {
 			if err := app.execAssert(ctx, a); err != nil {
 				if strings.HasPrefix(err.Error(), "assertion \"") {
 					return nil, fmt.Errorf("case %q: %v", c.Name, err)
 				}
+
 				return nil, err
 			}
+
 			lines = append(lines, fmt.Sprintf("PASS: %s", a.Name))
 		}
+
 		testReport := strings.Join(lines, "\n")
+
 		return &Result{Stdout: testReport}, nil
 	}
 
@@ -862,6 +837,7 @@ func (res *Result) toCty() cty.Value {
 			"set":        cty.BoolVal(false),
 		})
 	}
+
 	return cty.ObjectVal(map[string]cty.Value{
 		"stdout":     cty.StringVal(res.Stdout),
 		"stderr":     cty.StringVal(res.Stderr),
@@ -872,15 +848,18 @@ func (res *Result) toCty() cty.Value {
 
 func (app *App) execRunInternal(l *EventLogger, jobCtx *hcl2.EvalContext, run *RunJob) (*Result, error) {
 	args := map[string]interface{}{}
+
 	for k := range run.Args {
 		var v cty.Value
 		if diags := gohcl2.DecodeExpression(run.Args[k], jobCtx, &v); diags.HasErrors() {
 			return nil, diags
 		}
+
 		vv, err := ctyToGo(v)
 		if err != nil {
 			return nil, err
 		}
+
 		args[k] = vv
 	}
 
@@ -893,7 +872,7 @@ func (app *App) execRunInternal(l *EventLogger, jobCtx *hcl2.EvalContext, run *R
 	return app.run(l, run.Name, args, args)
 }
 
-func (app *App) execRun(l *EventLogger, jobCtx *hcl2.EvalContext, run *RunJob, m *sync.Mutex) (*Result, error) {
+func (app *App) execRun(l *EventLogger, jobCtx *hcl2.EvalContext, run *RunJob, m sync.Locker) (*Result, error) {
 	res, err := app.execRunInternal(l, jobCtx, run)
 
 	if res == nil {
@@ -905,11 +884,13 @@ func (app *App) execRun(l *EventLogger, jobCtx *hcl2.EvalContext, run *RunJob, m
 
 	runFields := map[string]cty.Value{}
 	runFields["res"] = res.toCty()
+
 	if err != nil {
 		runFields["err"] = cty.StringVal(err.Error())
 	} else {
 		runFields["err"] = cty.StringVal("")
 	}
+
 	runVal := cty.ObjectVal(runFields)
 	jobCtx.Variables["run"] = runVal
 
@@ -918,36 +899,47 @@ func (app *App) execRun(l *EventLogger, jobCtx *hcl2.EvalContext, run *RunJob, m
 
 func ctyToGo(v cty.Value) (interface{}, error) {
 	var vv interface{}
+
 	switch v.Type() {
 	case cty.String:
 		var vvv string
+
 		if err := gocty.FromCtyValue(v, &vvv); err != nil {
 			return nil, err
 		}
+
 		vv = vvv
 	case cty.Number:
 		var vvv int
+
 		if err := gocty.FromCtyValue(v, &vvv); err != nil {
 			return nil, err
 		}
+
 		vv = vvv
 	case cty.Bool:
 		var vvv bool
+
 		if err := gocty.FromCtyValue(v, &vvv); err != nil {
 			return nil, err
 		}
+
 		vv = vvv
 	case cty.List(cty.String):
 		var vvv []string
+
 		if err := gocty.FromCtyValue(v, &vvv); err != nil {
 			return nil, err
 		}
+
 		vv = vvv
 	case cty.List(cty.Number):
 		var vvv []int
+
 		if err := gocty.FromCtyValue(v, &vvv); err != nil {
 			return nil, err
 		}
+
 		vv = vvv
 	default:
 		return nil, fmt.Errorf("handler for type %s not implemneted yet", v.Type().FriendlyName())
@@ -957,26 +949,31 @@ func ctyToGo(v cty.Value) (interface{}, error) {
 }
 
 func (app *App) execJobSteps(l *EventLogger, jobCtx *hcl2.EvalContext, results map[string]cty.Value, steps []Step, concurrency int) (*Result, error) {
-	// TODO Sort steps by name and needs
+	hclCtx := *jobCtx
 
-	// TODO Clone this to avoid mutation
-	hclCtx := jobCtx
+	vars := map[string]cty.Value{}
+	for k, v := range jobCtx.Variables {
+		vars[k] = v
+	}
+
+	hclCtx.Variables = vars
 
 	m := new(sync.Mutex)
 
 	idToF := map[string]func() (*Result, error){}
 
 	var dagNodeIds []string
-	dagNodeIdToDeps := map[string][]string{}
-	dagNodeIdToIndex := map[string]int{}
+
+	dagNodeIDToDeps := map[string][]string{}
+	dagNodeIDToIndex := map[string]int{}
 
 	var lastRes *Result
+
 	for i := range steps {
 		s := steps[i]
 
 		f := func() (*Result, error) {
-			var err error
-			res, err := app.execRun(l, hclCtx, s.Run, m)
+			res, err := app.execRun(l, &hclCtx, s.Run, m)
 			if err != nil {
 				return res, err
 			}
@@ -994,19 +991,20 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *hcl2.EvalContext, results m
 
 		idToF[s.Name] = f
 
-		dagNodeIdToIndex[s.Name] = i
+		dagNodeIDToIndex[s.Name] = i
 
 		dagNodeIds = append(dagNodeIds, s.Name)
 
 		if s.Needs != nil {
-			dagNodeIdToDeps[s.Name] = *s.Needs
+			dagNodeIDToDeps[s.Name] = *s.Needs
 		} else {
-			dagNodeIdToDeps[s.Name] = []string{}
+			dagNodeIDToDeps[s.Name] = []string{}
 		}
 	}
 
 	g := dag.New(dag.Nodes(dagNodeIds))
-	for id, deps := range dagNodeIdToDeps {
+
+	for id, deps := range dagNodeIDToDeps {
 		g.AddDependencies(id, deps)
 	}
 
@@ -1022,15 +1020,18 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *hcl2.EvalContext, results m
 		}
 		// Preserve the order of definitions
 		sort.Slice(ids, func(i, j int) bool {
-			return dagNodeIdToIndex[ids[i]] < dagNodeIdToIndex[ids[j]]
+			return dagNodeIDToIndex[ids[i]] < dagNodeIDToIndex[ids[j]]
 		})
 
 		var wg sync.WaitGroup
+
 		type result struct {
 			r   *Result
 			err error
 		}
+
 		rs := make([]result, len(ids))
+
 		var rsm sync.Mutex
 
 		workqueue := make(chan func())
@@ -1043,7 +1044,7 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *hcl2.EvalContext, results m
 			}()
 		}
 
-		for i, _ := range ids {
+		for i := range ids {
 			id := ids[i]
 
 			f := idToF[id]
@@ -1059,16 +1060,19 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *hcl2.EvalContext, results m
 				rsm.Unlock()
 			}
 		}
+
 		wg.Wait()
 
 		lastRes = rs[len(rs)-1].r
 
 		var rese *multierror.Error
+
 		for i := range rs {
 			if rs[i].err != nil {
 				rese = multierror.Append(rese, err)
 			}
 		}
+
 		if rese != nil && rese.Len() > 0 {
 			return lastRes, rese
 		}
@@ -1083,105 +1087,97 @@ func getContext(sourceLocator hcl2.Expression) cty.Value {
 	{
 		context["sourcedir"] = sourcedir
 	}
+
 	ctx := cty.ObjectVal(context)
+
 	return ctx
+}
+
+func getDefault(ctx cty.Value, def hcl2.Expression, tpe cty.Type) (*cty.Value, error) {
+	r := def.Range()
+
+	if r.Start != r.End {
+		var vv cty.Value
+
+		defCtx := &hcl2.EvalContext{
+			Functions: conf.Functions("."),
+			Variables: map[string]cty.Value{
+				"context": ctx,
+			},
+		}
+		if err := gohcl2.DecodeExpression(def, defCtx, &vv); err != nil {
+			return nil, err
+		}
+
+		if vv.Type() != tpe {
+			return nil, errors.WithStack(fmt.Errorf("unexpected type of value %v provided: want %s, got %s", vv, tpe.FriendlyName(), vv.Type().FriendlyName()))
+		}
+
+		return &vv, nil
+	}
+
+	return nil, nil
+}
+
+func getValueFor(ctx cty.Value, name string, typeExpr hcl2.Expression, defaultExpr hcl2.Expression, provided map[string]interface{}) (*cty.Value, error) {
+	v := provided[name]
+
+	tpe, diags := typeexpr.TypeConstraint(typeExpr)
+	if diags != nil {
+		return nil, diags
+	}
+
+	switch v.(type) {
+	case nil:
+		vv, err := getDefault(ctx, defaultExpr, tpe)
+		if err != nil {
+			return nil, err
+		} else if vv == nil {
+			return nil, errors.New("missing value")
+		}
+
+		return vv, nil
+	}
+
+	if vty, err := gocty.ImpliedType(v); err != nil {
+		return nil, err
+	} else if vty != tpe {
+		return nil, fmt.Errorf("unexpected type. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
+	}
+
+	val, err := gocty.ToCtyValue(v, tpe)
+	if err != nil {
+		return nil, err
+	}
+
+	return &val, nil
 }
 
 func createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interface{}, givenOpts map[string]interface{}) (*hcl2.EvalContext, error) {
 	ctx := getContext(j.SourceLocator)
 
 	params := map[string]cty.Value{}
+
 	paramSpecs := append(append([]Parameter{}, cc.Parameters...), j.Parameters...)
 	for _, p := range paramSpecs {
-		v := givenParams[p.Name]
-
-		var tpe cty.Type
-		tpe, diags := typeexpr.TypeConstraint(p.Type)
-		if diags != nil {
-			return nil, diags
-		}
-
-		switch v.(type) {
-		case nil:
-			r := p.Default.Range()
-			if r.Start != r.End {
-				var vv cty.Value
-				defCtx := &hcl2.EvalContext{
-					Functions: conf.Functions("."),
-					Variables: map[string]cty.Value{
-						"context": ctx,
-					},
-				}
-				if err := gohcl2.DecodeExpression(p.Default, defCtx, &vv); err != nil {
-					return nil, err
-				}
-				if vv.Type() != tpe {
-					return nil, errors.WithStack(fmt.Errorf("job %q: unexpected type of value %v provided to parameter %q: want %s, got %s", j.Name, vv, p.Name, tpe.FriendlyName(), vv.Type().FriendlyName()))
-				}
-				params[p.Name] = vv
-				continue
-			}
-			return nil, fmt.Errorf("job %q: missing value for parameter %q", j.Name, p.Name)
-		}
-
-		if vty, err := gocty.ImpliedType(v); err != nil {
-			return nil, err
-		} else if vty != tpe {
-			return nil, fmt.Errorf("job %q: unexpected type of option. want %q, got %q", j.Name, tpe.FriendlyNameForConstraint(), vty.FriendlyName())
-		}
-
-		val, err := gocty.ToCtyValue(v, tpe)
+		v, err := getValueFor(ctx, p.Name, p.Type, p.Default, givenParams)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("job %q: parameter %q: %v", j.Name, p.Name, err)
 		}
-		params[p.Name] = val
+
+		params[p.Name] = *v
 	}
 
 	opts := map[string]cty.Value{}
+
 	optSpecs := append(append([]OptionSpec{}, cc.Options...), j.Options...)
 	for _, op := range optSpecs {
-		v := givenOpts[op.Name]
-
-		var tpe cty.Type
-		tpe, diags := typeexpr.TypeConstraint(op.Type)
-		if diags != nil {
-			return nil, diags
-		}
-
-		switch v.(type) {
-		case nil:
-			r := op.Default.Range()
-			if r.Start != r.End {
-				var vv cty.Value
-				defCtx := &hcl2.EvalContext{
-					Functions: conf.Functions("."),
-					Variables: map[string]cty.Value{
-						"context": ctx,
-					},
-				}
-				if err := gohcl2.DecodeExpression(op.Default, defCtx, &vv); err != nil {
-					return nil, err
-				}
-				if vv.Type() != tpe {
-					return nil, errors.WithStack(fmt.Errorf("job %q: unexpected type of vaule %v provided to option %q: want %s, got %s", j.Name, vv, op.Name, tpe.FriendlyName(), vv.Type().FriendlyName()))
-				}
-				opts[op.Name] = vv
-				continue
-			}
-			return nil, fmt.Errorf("job %q: missing value for option %q", j.Name, op.Name)
-		}
-
-		if vty, err := gocty.ImpliedType(v); err != nil {
-			return nil, err
-		} else if vty != tpe {
-			return nil, fmt.Errorf("job %q: unexpected type of option. want %q, got %q", j.Name, tpe.FriendlyNameForConstraint(), vty.FriendlyName())
-		}
-
-		val, err := gocty.ToCtyValue(v, tpe)
+		v, err := getValueFor(ctx, op.Name, op.Type, op.Default, givenOpts)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("job %q: option %q: %v", j.Name, op.Name, err)
 		}
-		opts[op.Name] = val
+
+		opts[op.Name] = *v
 	}
 
 	varSpecs := append(append([]Variable{}, cc.Variables...), j.Variables...)
@@ -1223,13 +1219,19 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 	confSpecs := append(append([]Config{}, f(cc.JobSpec)...), f(j)...)
 
 	confFields := map[string]cty.Value{}
+
 	for confIndex := range confSpecs {
 		confSpec := confSpecs[confIndex]
 		merged := map[string]interface{}{}
+
 		for sourceIdx := range confSpec.Sources {
 			sourceSpec := confSpec.Sources[sourceIdx]
+
 			var yamlData []byte
+
 			var format string
+
+			const FormatYAML = "yaml"
 
 			switch sourceSpec.Type {
 			case "file":
@@ -1239,15 +1241,17 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 				}
 
 				var err error
+
 				yamlData, err = ioutil.ReadFile(source.Path)
 				if err != nil {
 					if source.Default == nil {
 						return cty.NilVal, fmt.Errorf("job %q: %s %q: source %d: %v", j.Name, confType, confSpec.Name, sourceIdx, err)
 					}
+
 					yamlData = []byte(*source.Default)
 				}
 
-				format = "yaml"
+				format = FormatYAML
 			case "job":
 				var source SourceJob
 				if err := gohcl2.DecodeBody(sourceSpec.Body, confCtx, &source); err != nil {
@@ -1261,11 +1265,13 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 				}
 
 				args := map[string]interface{}{}
+
 				for k, v := range ctyArgs {
 					vv, err := ctyToGo(v)
 					if err != nil {
 						return cty.NilVal, err
 					}
+
 					args[k] = vv
 				}
 
@@ -1279,7 +1285,7 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 				if source.Format != nil {
 					format = *source.Format
 				} else {
-					format = "yaml"
+					format = FormatYAML
 				}
 			default:
 				return cty.DynamicVal, fmt.Errorf("config source %q is not implemented. It must be either \"file\" or \"job\", so that it looks like `source file {` or `source file {`", sourceSpec.Type)
@@ -1288,7 +1294,7 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 			m := map[string]interface{}{}
 
 			switch format {
-			case "yaml":
+			case FormatYAML:
 				if err := yaml.Unmarshal(yamlData, &m); err != nil {
 					return cty.NilVal, err
 				}
@@ -1306,6 +1312,7 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 			if err != nil {
 				return cty.NilVal, err
 			}
+
 			merged = r
 		}
 
@@ -1326,16 +1333,19 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 
 		confFields[confSpec.Name] = v
 	}
+
 	return cty.ObjectVal(confFields), nil
 }
 
 func getVarialbles(varCtx *hcl2.EvalContext, varSpecs []Variable) (cty.Value, error) {
 	varFields := map[string]cty.Value{}
+
 	for _, varSpec := range varSpecs {
 		var tpe cty.Type
 
 		if tv, _ := varSpec.Type.Value(nil); !tv.IsNull() {
 			var diags hcl2.Diagnostics
+
 			tpe, diags = typeexpr.TypeConstraint(varSpec.Type)
 			if diags != nil {
 				return cty.ObjectVal(varFields), diags
@@ -1347,6 +1357,7 @@ func getVarialbles(varCtx *hcl2.EvalContext, varSpecs []Variable) (cty.Value, er
 			if err := gohcl2.DecodeExpression(varSpec.Value, varCtx, &v); err != nil {
 				return cty.ObjectVal(varFields), err
 			}
+
 			if vty, err := gocty.ImpliedType(v); err != nil {
 				return cty.ObjectVal(varFields), err
 			} else if vty != tpe {
@@ -1357,6 +1368,7 @@ func getVarialbles(varCtx *hcl2.EvalContext, varSpecs []Variable) (cty.Value, er
 			if err != nil {
 				return cty.ObjectVal(varFields), err
 			}
+
 			varFields[varSpec.Name] = val
 		} else {
 			var v cty.Value
@@ -1374,6 +1386,7 @@ func getVarialbles(varCtx *hcl2.EvalContext, varSpecs []Variable) (cty.Value, er
 			varFields[varSpec.Name] = v
 		}
 	}
+
 	return cty.ObjectVal(varFields), nil
 }
 
@@ -1399,6 +1412,7 @@ func getModule(ctx *hcl2.EvalContext, m1, m2 hcl2.Expression) (cty.Value, error)
 		variantmod.LockFile(fmt.Sprintf("%s.variantmod.lock", moduleName)),
 		variantmod.WD(filepath.Dir(fname)),
 	)
+
 	if err != nil {
 		return cty.NilVal, err
 	}

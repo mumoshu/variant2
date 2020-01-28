@@ -3,26 +3,28 @@ package app
 import (
 	"bytes"
 	"fmt"
-	"github.com/hashicorp/hcl/v2"
-	"github.com/mumoshu/hcl2test/pkg/conf"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/hashicorp/hcl/v2"
+
+	"github.com/mumoshu/hcl2test/pkg/conf"
 )
 
-func (a *App) ExportShim(srcDir, dstDir string) error {
+func (app *App) ExportShim(srcDir, dstDir string) error {
 	if err := os.MkdirAll(dstDir, 0755); err != nil {
 		return err
 	}
 
-	files, _, _, err := newConfigFromDir(srcDir)
+	files, _, err := newConfigFromDir(srcDir)
 	if err != nil {
 		return err
 	}
 
 	var binName string
-	if a.BinName != "" {
-		binName = a.BinName
+	if app.BinName != "" {
+		binName = app.BinName
 	} else {
 		binName = "variant"
 	}
@@ -37,6 +39,7 @@ func exportWithShim(variantBin string, files map[string]*hcl.File, dstDir string
 	cfgPath := filepath.Join(dstDir, binName+conf.VariantFileExt)
 
 	buf := bytes.Buffer{}
+
 	for _, file := range files {
 		buf.Write(file.Bytes)
 		buf.Write([]byte("\n"))
@@ -56,11 +59,11 @@ func GenerateShim(variantBin, dir string) error {
 	return generateShim(variantBin, binPath)
 }
 
-func generateShim(variantBin, path string) error {
-	shimData := []byte(fmt.Sprintf(`#!/usr/bin/env variant
+func generateShim(variantBin string, path string) error {
+	shimData := []byte(fmt.Sprintf(`#!/usr/bin/env %s
 
 import = "."
-`))
+`, variantBin))
 
 	return ioutil.WriteFile(path, shimData, 0755)
 }
