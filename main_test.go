@@ -46,11 +46,13 @@ func TestExamples(t *testing.T) {
 			variantDir:  "./examples/simple",
 		},
 		{
+			subject:    "variant run app deploy on simple example w/ ns1",
 			args:       []string{"variant", "run", "app", "deploy", "--namespace", "ns1"},
 			variantDir: "./examples/simple",
 			expectErr:  "command \"bash -c     kubectl -n ns1 apply -f examples/simple/manifests/\n\": exit status 1",
 		},
 		{
+			subject:    "variant run app deploy on simple example w/ default",
 			args:       []string{"variant", "run", "app", "deploy", "--namespace", "default"},
 			variantDir: "./examples/simple",
 		},
@@ -65,11 +67,7 @@ func TestExamples(t *testing.T) {
 			variantDir: "./examples/module",
 		},
 		{
-			variantName: "",
-			args:        []string{"variant", "test"},
-			variantDir:  "./examples/simple",
-		},
-		{
+			subject:     "variant test on simple example",
 			variantName: "",
 			args:        []string{"variant", "test"},
 			wd:          "./examples/simple",
@@ -93,23 +91,27 @@ func TestExamples(t *testing.T) {
 			wd:          "./examples/concurrency",
 		},
 		{
+			subject:     "kubectl mock apply",
 			variantName: "kubectl",
 			args:        []string{"variant", "apply", "--namespace", "default", "-f", "examples/simple/manifests/"},
 			variantDir:  "./examples/simple/mocks/kubectl",
 		},
 		{
+			subject:     "rubyrunner test1",
 			variantName: "rubyrunner",
 			args:        []string{"variant", "test1"},
 			variantDir:  "./examples/rubyrunner",
 			expectOut:   "TEST\n",
 		},
 		{
+			subject:     "rubyrunner test2",
 			variantName: "rubyrunner",
 			args:        []string{"variant", "test2"},
 			variantDir:  "./examples/rubyrunner",
 			expectOut:   "TEST\n",
 		},
 		{
+			subject:     "rubyrunner test3",
 			variantName: "rubyrunner",
 			args:        []string{"variant", "test3"},
 			variantDir:  "./examples/rubyrunner",
