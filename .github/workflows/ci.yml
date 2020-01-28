@@ -19,4 +19,8 @@ jobs:
     - name: Run golangci-lint
       run: make lint
     - name: Run tests
-      run: make test
+      run: |
+        which kubectl
+        apt-get update -y
+        apt-get install ruby -y
+        make test
