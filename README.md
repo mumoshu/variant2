@@ -117,6 +117,7 @@ Head over to the following per-topic sections for more features:
 - [Generating Shims](#generating-shims) to make your Variant command look native
 - [Concurrency](#concurrency) section to make `kubectl` and `helm` concurrent so that the installation time becomes minimal
 - [Log Collection](#log-collection) to filter and forward log of commands and the arguments passed to them along with their outputs
+- Use [Split, Merge and Import](#split-merge-and-import) to split, compose and tidy Variant commands
 
 # Features
 
@@ -162,6 +163,79 @@ Flags:
 
 Use "getting-started [command] --help" for more information about a command.
 ```
+
+## Split, Merge and Import
+
+Do you have a huge `yourcmd.variant` that needs to be split for readability?
+
+`path/to/yourcmd.variant`:
+
+```hcl
+job "foo" {
+  # snip
+}
+
+job "bar" {
+  # snip
+}
+
+job "baz" {
+  # snip
+}
+```
+
+Variant usually works per-directory basis. That is, it loads and merges all the `.variant` files in a directory to form a single command.
+
+That is, you can just split the file into three `.variant` files in the same directory to split the huge file:
+
+`path/to/yourcmd_foo.variant`:
+```hcl
+job "foo" {
+  parameter "param1" {
+    # snip
+  }
+
+  # snip
+}
+```
+
+`path/to/yourcmd_bar.variant`:
+```hcl
+job "bar" {
+  # snip
+}
+```
+
+`path/to/yourcmd_baz.variant`:
+```hcl
+job "baz" {
+  # snip
+}
+```
+
+Okay that works. But you ended up too many files in a single directory? `import = "path/to/dir"` can be used to load all the `*.variant` files in the directory into the current `job`.
+
+`path/to/yourcmd.variant`:
+```hcl
+job "foo" {
+  import = "./foo"
+}
+
+job "bar" {
+  import = "./bar"
+}
+```
+
+`path/to/foo/foo.variant`:
+```hcl
+parameter "param1" {
+  # snip
+}
+
+# snip
+```
+
+See the [import](/examples/advanced/import) example for the full declaration of this command for reference.
 
 ## Concurrency
 
