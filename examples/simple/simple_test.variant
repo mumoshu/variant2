@@ -2,7 +2,7 @@
 test "app deploy" {
   variable "path" {
     type = string
-    value = ".:/bin:/usr/bin:${abspath("${context.sourcedir}/mocks/kubectl")}"
+    value = ".:${abspath("${context.sourcedir}/mocks/kubectl")}:/bin:/usr/bin"
   }
 
   case "ng1" {
