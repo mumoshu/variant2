@@ -21,6 +21,6 @@ jobs:
     - name: Run tests
       run: |
         which kubectl
-        apt-get update -y
-        apt-get install ruby -y
+        sudo apt-get update -y
+        sudo apt-get install ruby -y
         make test
