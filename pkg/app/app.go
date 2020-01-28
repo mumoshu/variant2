@@ -273,8 +273,6 @@ type App struct {
 	JobByName map[string]JobSpec
 
 	Stdout, Stderr io.Writer
-
-	TraceCommands []string
 }
 
 func New(dir string) (*App, error) {
@@ -544,8 +542,6 @@ func (app *App) PrintError(err error) {
 }
 
 func (app *App) execCmd(cmd string, args []string, env map[string]string, log bool) (*Result, error) {
-	app.TraceCommands = append(app.TraceCommands, fmt.Sprintf("%s %s", cmd, strings.Join(args, " ")))
-
 	shellCmd := &shell.Command{
 		Name: cmd,
 		Args: args,
