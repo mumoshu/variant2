@@ -469,9 +469,30 @@ func (m Main) runApp(ap *app.App, cmdName string) error {
 	}
 	exportCmd.AddCommand(shimCmd)
 
+	generateCmd := &cobra.Command{
+		Use:   "generate RESOURCE DIR",
+		Short: "Generate RESOURCE for the Variant command defined in DIR",
+	}
+	{
+		generateShimCmd := &cobra.Command{
+			Use:   "shim DIR",
+			Short: "Generate a shim for the Variant command defined in DIR",
+			Args:  cobra.ExactArgs(1),
+			RunE: func(c *cobra.Command, args []string) error {
+				err := app.GenerateShim(m.Args[0], args[0])
+				if err != nil {
+					c.SilenceUsage = true
+				}
+				return err
+			},
+		}
+		generateCmd.AddCommand(generateShimCmd)
+	}
+
 	rootCmd.AddCommand(runRootCmd)
 	rootCmd.AddCommand(testCmd)
 	rootCmd.AddCommand(exportCmd)
+	rootCmd.AddCommand(generateCmd)
 	rootCmd.SetArgs(m.Args[1:])
 	return rootCmd.Execute()
 }

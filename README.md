@@ -10,7 +10,7 @@ Once finished, this repository will eventually take over the `master` branch of 
 
 Create an `variant` file that contains the following:
 
-`getting-started.variant`:
+[`examples/getting-started/getting-started.variant`](/examples/getting-started/getting-started.variant):
 
 ```hcl
 option "namespace" {
@@ -112,7 +112,41 @@ As you've seen in the help output, `variant run deploy` runs the `deploy` job, w
 $ variant run deploy
 ```
 
-Head over to the [Concurrency](#concurrency) section to make `kubectl` and `helm` concurrent so that the installation time becomes minimal.
+If you're distributing this command with your teammates, do use `variant generate shim` to create a shim to make it look like a native command:
+
+```console
+$ variant generate shim examples/getting-started/
+```
+
+```console
+$ cat ./examples/getting-started/getting-started
+#!/usr/bin/env variant
+
+import = "."
+```
+
+```console
+$ ./examples/getting-started/getting-started
+Usage:
+  getting-started [flags]
+  getting-started [command]
+
+Available Commands:
+  deploy      Deploys our application and the infrastructure onto the K8s cluster
+  helm
+  help        Help about any command
+  kubectl
+
+Flags:
+  -h, --help               help for getting-started
+  -n, --namespace string   Namespace to interact with
+
+Use "getting-started [command] --help" for more information about a command.
+```
+
+Head over to the following per-topic sections for more features:
+
+- [Concurrency](#concurrency) section to make `kubectl` and `helm` concurrent so that the installation time becomes minimal
 
 # Features
 

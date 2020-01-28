@@ -27,10 +27,10 @@ func (a *App) ExportShim(srcDir, dstDir string) error {
 		binName = "variant"
 	}
 
-	return generateShim(binName, files, dstDir)
+	return exportWithShim(binName, files, dstDir)
 }
 
-func generateShim(variantBin string, files map[string]*hcl.File, dstDir string) error {
+func exportWithShim(variantBin string, files map[string]*hcl.File, dstDir string) error {
 	binName := filepath.Base(dstDir)
 
 	binPath := filepath.Join(dstDir, binName)
@@ -46,17 +46,21 @@ func generateShim(variantBin string, files map[string]*hcl.File, dstDir string) 
 		return err
 	}
 
-	shimData := []byte(fmt.Sprintf(`#!/usr/bin/env bash
+	return generateShim(variantBin, binPath)
+}
 
-export VARIANT_NAME=$(basename $0)
-export VARIANT_DIR=$(dirname $0)
+func GenerateShim(variantBin, dir string) error {
+	binName := filepath.Base(dir)
+	binPath := filepath.Join(dir, binName)
 
-exec %s $@
-`, variantBin))
+	return generateShim(variantBin, binPath)
+}
 
-	if err := ioutil.WriteFile(binPath, shimData, 0755); err != nil {
-		return err
-	}
+func generateShim(variantBin, path string) error {
+	shimData := []byte(fmt.Sprintf(`#!/usr/bin/env variant
 
-	return nil
+import = "."
+`))
+
+	return ioutil.WriteFile(path, shimData, 0755)
 }
