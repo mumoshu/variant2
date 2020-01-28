@@ -116,6 +116,7 @@ Head over to the following per-topic sections for more features:
 
 - [Generating Shims](#generating-shims) to make your Variant command look native
 - [Concurrency](#concurrency) section to make `kubectl` and `helm` concurrent so that the installation time becomes minimal
+- [Log Collection](#log-collection) to filter and forward log of commands and the arguments passed to them along with their outputs
 
 # Features
 
@@ -216,6 +217,66 @@ job "deploy" {
 
 Now, running `variant run deploy` deploys fluend and prometheus concurrently.
 Once finished, it deploys your app, as you've declared so in the `needs` attribute of the `run "deploy apps" {}` block.
+
+## Log Collection
+
+`log` block(s) placed under a `job` can be used to forward log of commands and the arguments passed to them along with their outputs.
+
+Let's assume you'd like to collect log for the `test` job:
+
+```hcl
+job "test" {
+  run "echo" {
+    message = "foo"
+  }
+}
+```
+
+Collecting all the `run` and `exec` that are executed as part of this `job` along with all the metadata attached to respective event can be achieved by filtering events by `condition` and formatting log messages with `format` like:
+
+```hcl
+log {
+  collect {
+    condition = event.type == "exec"
+    format = "exec=${jsonencode(event.exec)}"
+  }
+
+  collect {
+    condition = event.type == "run"
+    format = "run=${jsonencode(event.run)}"
+  }
+
+  # The log file to be created
+  file = "${context.sourcedir}/log.txt"
+}
+```
+
+In case you need to post-process or upload the log file, use `forward` to pass the log file to any Variant `job`:
+
+```hcl
+file = "${context.sourcedir}/log.txt"
+
+forward {
+  run "save-logs" {
+    logfile = log.file
+  }
+}
+
+# ...
+
+job "save-logs" {
+  option "logfile" {
+    type = string
+  }
+
+  exec {
+     command = "upload-to-jira"
+     args = ["-f", opt.logfile]
+  }
+}
+```
+
+See the [logcollection](/examples/advanced/logcollection) example for the full declaration of this command for reference.
 
 ## Configuration Language
 
