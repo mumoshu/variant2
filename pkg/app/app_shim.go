@@ -9,7 +9,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 
-	"github.com/mumoshu/hcl2test/pkg/conf"
+	"github.com/mumoshu/variant2/pkg/conf"
 )
 
 func (app *App) ExportShim(srcDir, dstDir string) error {

@@ -1,6 +1,6 @@
 .PHONY: build
 build:
-	go build -o variant ./
+	go build -o variant ./pkg/cmd
 
 bin/goimports:
 	GOBIN=$(PWD)/bin go install golang.org/x/tools/cmd/goimports

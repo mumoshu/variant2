@@ -1,4 +1,4 @@
-package main
+package variant
 
 import (
 	"bytes"
@@ -135,13 +135,18 @@ func TestExamples(t *testing.T) {
 			args:        []string{"variant", "test"},
 			wd:          "./examples/options",
 		},
+		{
+			subject: "shebang",
+			args:    []string{"variant", "./test/shebang/myapp/myapp", "test", "--int1", "1", "--ints1", "1,2", "--str1", "a", "--strs1", "b,c",},
+			wd:      "./test",
+		},
 	}
 
 	for i := range testcases {
 		tc := testcases[i]
 		t.Run(fmt.Sprintf("%d: %s", i, tc.subject), func(t *testing.T) {
 			outRead, outWrite := io.Pipe()
-			m := Main{
+			m := Init(Main{
 				Stdout: outWrite,
 				Stderr: os.Stderr,
 				Args:   tc.args,
@@ -161,7 +166,7 @@ func TestExamples(t *testing.T) {
 					}
 					return "", fmt.Errorf("Unexpected call to getw")
 				},
-			}
+			})
 			var err error
 
 			go func() {
@@ -217,7 +222,7 @@ func TestExport(t *testing.T) {
 		tc := testcases[i]
 		t.Run(fmt.Sprintf("%d: %s", i, tc.subject), func(t *testing.T) {
 			outRead, outWrite := io.Pipe()
-			m := Main{
+			m := Init(Main{
 				Stdout: outWrite,
 				Stderr: os.Stderr,
 				Args:   append(append([]string{}, tc.exportArgs...), tc.srcDir, tc.dstDir),
@@ -237,7 +242,7 @@ func TestExport(t *testing.T) {
 					}
 					return "", fmt.Errorf("Unexpected call to getw")
 				},
-			}
+			})
 			var err error
 
 			go func() {
@@ -310,7 +315,7 @@ Global Flags:
       --str1 string     
       --strs1 strings
 
-Error: required flag(s) "int1", "ints1", "str1", "strs1" not set`,
+`,
 		},
 		{
 			subject: "shebang_usage",
@@ -334,7 +339,7 @@ Flags:
 
 Use "myapp [command] --help" for more information about a command.
 
-Error: required flag(s) "int1", "ints1", "str1", "strs1" not set`,
+`,
 		},
 	}
 

@@ -1,4 +1,4 @@
-module github.com/mumoshu/hcl2test
+module github.com/mumoshu/variant2
 
 go 1.13
 

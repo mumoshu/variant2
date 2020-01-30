@@ -20,7 +20,7 @@ import (
 	gohcl2 "github.com/hashicorp/hcl/v2/gohcl"
 	hcl2parse "github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/imdario/mergo"
-	"github.com/mumoshu/hcl2test/pkg/conf"
+	"github.com/mumoshu/variant2/pkg/conf"
 	"github.com/pkg/errors"
 	"github.com/variantdev/dag/pkg/dag"
 	"github.com/variantdev/mod/pkg/shell"

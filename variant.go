@@ -1,44 +1,114 @@
-package main
+package variant
 
 import (
+	"errors"
 	"fmt"
+	"github.com/hashicorp/hcl/v2/ext/typeexpr"
+	"github.com/mumoshu/variant2/pkg/app"
+	"github.com/spf13/cobra"
+	"github.com/zclconf/go-cty/cty"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/hashicorp/hcl/v2/ext/typeexpr"
-	"github.com/mumoshu/hcl2test/pkg/app"
-	"github.com/spf13/cobra"
-	"github.com/zclconf/go-cty/cty"
+	"sync"
 )
 
 var Version string
 
 type Main struct {
-	Command        string
-	Source         []byte
+	// Command is the name of the executable used for this process.
+	// E.g. `go build -o myapp ./` and `./myapp cmd --flag1` results in Command being "myapp".
+	Command string
+	Source  []byte
+	// Path can be a path to the directory or the file containing the definition for the Variant command being run
+	Path           string
 	Stdout, Stderr io.Writer
 	Args           []string
 	Getenv         func(string) string
 	Getwd          func() (string, error)
 }
 
-func main() {
-	m := Main{
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-		Args:   os.Args,
-		Getenv: os.Getenv,
-		Getwd:  os.Getwd,
+func Load(path string) (*Runner, error) {
+	m := Init(Main{Command: filepath.Base(path), Path: path})
+
+	return m.Runner()
+}
+
+func Eval(cmd, source string) (*Runner, error) {
+	m := Init(Main{Command: cmd, Source: []byte(source)})
+
+	return m.Runner()
+}
+
+func MustEval(cmd, source string) *Runner {
+	r, err := Eval(cmd, source)
+
+	if err != nil {
+		panic(err)
 	}
 
-	if err := m.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v", err)
-		os.Exit(1)
+	return r
+}
+
+func New() Main {
+	return Init(Main{})
+}
+
+func Init(m Main) Main {
+	if m.Stdout == nil {
+		m.Stdout = os.Stdout
 	}
+
+	if m.Stderr == nil {
+		m.Stderr = os.Stderr
+	}
+
+	if m.Args == nil || len(m.Args) == 0 {
+		m.Args = os.Args
+	}
+
+	if m.Path == "" && len(m.Args) > 1 {
+		file := m.Args[1]
+		info, err := os.Stat(file)
+
+		if err == nil && info != nil && !info.IsDir() {
+			cmdName := filepath.Base(file)
+			args := []string{cmdName}
+
+			m.Command = cmdName
+
+			if len(m.Args) > 2 {
+				args = append(args, m.Args[2:]...)
+			}
+
+			m.Args = args
+
+			m.Path = file
+		}
+	}
+
+	if m.Getenv == nil {
+		m.Getenv = os.Getenv
+	}
+
+	if m.Getwd == nil {
+		m.Getwd = os.Getwd
+	}
+
+	cmdNameFromEnv := m.Getenv("VARIANT_NAME")
+	if cmdNameFromEnv != "" {
+		m.Command = cmdNameFromEnv
+	}
+
+	dirFromEnv := m.Getenv("VARIANT_DIR")
+	if dirFromEnv != "" {
+		m.Path = dirFromEnv
+	}
+
+	return m
 }
 
 type Config struct {
@@ -276,7 +346,120 @@ func (m *Main) initAppFromSource(cmd string, code []byte) (*app.App, error) {
 	return ap, nil
 }
 
-func (m *Main) initCommand(ap *app.App, rootCmdName string) (*cobra.Command, error) {
+func (m Main) Run() error {
+	r, err := m.Runner()
+	if err != nil {
+		return err
+	}
+
+	return r.Run(m.Args[1:], RunOptions{})
+}
+
+func (m Main) Runner() (*Runner, error) {
+	var m2 *Runner
+
+	if m.Source != nil {
+		var err error
+
+		if m.Command == "" {
+			return nil, errors.New("Main.Command must be set when loadling from Variant source file")
+		}
+
+		m2, err = m.runnerFromSource(m.Command, m.Source)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if m2 == nil {
+		path := m.Path
+
+		if path == "" {
+			var err error
+
+			path, err = m.Getwd()
+
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, err
+		}
+
+		cmd := m.Command
+
+		if info.IsDir() {
+			m2, err = m.runnerFromDir(cmd, path)
+		} else {
+			m2, err = m.runnerFromFile(cmd, path)
+		}
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return m2, nil
+}
+
+func (m Main) runnerFromDir(cmd string, dir string) (*Runner, error) {
+	ap, err := m.initAppFromDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	return m.newRunner(ap, cmd), nil
+}
+
+func (m Main) runnerFromFile(cmd string, file string) (*Runner, error) {
+	ap, err := m.initAppFromFile(file)
+	if err != nil {
+		return nil, err
+	}
+
+	return m.newRunner(ap, cmd), nil
+}
+
+func (m Main) runnerFromSource(cmd string, code []byte) (*Runner, error) {
+	ap, err := m.initAppFromSource(cmd, code)
+	if err != nil {
+		return nil, err
+	}
+
+	return m.newRunner(ap, cmd), nil
+}
+
+func (m Main) newRunner(ap *app.App, cmdName string) *Runner {
+	m2 := &Runner{
+		mut:        &sync.Mutex{},
+		ap:         ap,
+		runCmdName: cmdName,
+	}
+
+	return m2
+}
+
+type Runner struct {
+	ap         *app.App
+	runCmdName string
+
+	runCmd     *cobra.Command
+	variantCmd *cobra.Command
+
+	mut *sync.Mutex
+}
+
+func (r *Runner) Cobra() (*cobra.Command, error) {
+	ap, rootCmdName := r.ap, r.runCmdName
+
+	if rootCmdName == "" {
+		rootCmdName = "run"
+	}
+
 	jobs := map[string]app.JobSpec{}
 	jobNames := []string{}
 
@@ -376,99 +559,82 @@ func (m *Main) initCommand(ap *app.App, rootCmdName string) (*cobra.Command, err
 	return rootCmd, nil
 }
 
-func (m Main) Run() error {
-	cmdNameFromEnv := m.Getenv("VARIANT_NAME")
-	if cmdNameFromEnv != "" {
-		m.Command = cmdNameFromEnv
+type RunOptions struct {
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+func (r Runner) Run(arguments []string, opt ...RunOptions) error {
+	r.mut.Lock()
+	defer r.mut.Unlock()
+
+	var opts RunOptions
+
+	if len(opt) > 0 {
+		opts = opt[0]
 	}
 
-	if m.Source != nil {
-		return m.runSource(m.Command, m.Source)
-	}
-
-	if len(m.Args) > 1 {
-		file := m.Args[1]
-		info, err := os.Stat(file)
-
-		if err == nil && info != nil && !info.IsDir() {
-			cmdName := filepath.Base(file)
-			args := []string{cmdName}
-
-			if len(m.Args) > 2 {
-				args = append(args, m.Args[2:]...)
-			}
-
-			m.Args = args
-			m.Command = cmdName
-
-			return m.runFile(cmdName, file)
-		}
-	}
-
-	dirFromEnv := m.Getenv("VARIANT_DIR")
-
-	dir := dirFromEnv
-
-	if dir == "" {
+	if r.runCmd == nil {
 		var err error
 
-		dir, err = m.Getwd()
+		r.runCmd, err = r.Cobra()
 
 		if err != nil {
 			return err
 		}
 	}
 
-	return m.runDir(dir)
-}
+	var cmd *cobra.Command
 
-func (m Main) runDir(dir string) error {
-	var cmdName string
-	if m.Command != "" {
-		cmdName = m.Command
+	if r.runCmdName != "" {
+		cmd = r.runCmd
 	} else {
-		cmdName = "run"
+		if r.variantCmd == nil {
+			r.variantCmd = r.createVariantRootCommand()
+		}
+
+		cmd = r.variantCmd
 	}
 
-	ap, err := m.initAppFromDir(dir)
-	if err != nil {
-		return err
+	var err error
+
+	{
+		stdout := cmd.OutOrStdout()
+		stderr := cmd.OutOrStderr()
+
+		cmd.SetArgs(arguments)
+
+		if opts.Stdout != nil {
+			cmd.SetOut(opts.Stdout)
+		}
+
+		if opts.Stderr != nil {
+			cmd.SetErr(opts.Stderr)
+		}
+
+		err = cmd.Execute()
+
+		cmd.SetOut(stdout)
+		cmd.SetErr(stderr)
 	}
 
-	return m.runApp(ap, cmdName)
+	return err
 }
 
-func (m Main) runFile(asCmd, file string) error {
-	ap, err := m.initAppFromFile(file)
-	if err != nil {
-		return err
-	}
-
-	return m.runApp(ap, asCmd)
+type Error struct {
+	Message  string
+	ExitCode int
 }
 
-func (m Main) runSource(asCmd string, code []byte) error {
-	ap, err := m.initAppFromSource(asCmd, code)
-	if err != nil {
-		return err
-	}
-
-	return m.runApp(ap, asCmd)
+func (e Error) Error() string {
+	return e.Message
 }
 
-func (m Main) runApp(ap *app.App, cmdName string) error {
-	runRootCmd, err := m.initCommand(ap, cmdName)
-	if err != nil {
-		return err
-	}
-
-	if m.Command != "" {
-		runRootCmd.SetArgs(m.Args[1:])
-		return runRootCmd.Execute()
-	}
+func (r *Runner) createVariantRootCommand() *cobra.Command {
+	const VariantBinName = "variant"
 
 	rootCmd := &cobra.Command{
-		Use:     "variant",
+		Use:     VariantBinName,
 		Version: Version,
 	}
 	testCmd := &cobra.Command{
@@ -480,7 +646,7 @@ func (m Main) runApp(ap *app.App, cmdName string) error {
 			if len(args) > 0 {
 				prefix = args[0]
 			}
-			_, err := ap.RunTests(prefix)
+			_, err := r.ap.RunTests(prefix)
 			if err != nil {
 				c.SilenceUsage = true
 			}
@@ -496,7 +662,7 @@ func (m Main) runApp(ap *app.App, cmdName string) error {
 		Short: "Copy and generate shim for the Variant command defined in the SRC",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(c *cobra.Command, args []string) error {
-			err := ap.ExportShim(args[0], args[1])
+			err := r.ap.ExportShim(args[0], args[1])
 			if err != nil {
 				c.SilenceUsage = true
 			}
@@ -515,7 +681,7 @@ func (m Main) runApp(ap *app.App, cmdName string) error {
 			Short: "Generate a shim for the Variant command defined in DIR",
 			Args:  cobra.ExactArgs(1),
 			RunE: func(c *cobra.Command, args []string) error {
-				err := app.GenerateShim(m.Args[0], args[0])
+				err := app.GenerateShim(VariantBinName, args[0])
 				if err != nil {
 					c.SilenceUsage = true
 				}
@@ -525,11 +691,10 @@ func (m Main) runApp(ap *app.App, cmdName string) error {
 		generateCmd.AddCommand(generateShimCmd)
 	}
 
-	rootCmd.AddCommand(runRootCmd)
+	rootCmd.AddCommand(r.runCmd)
 	rootCmd.AddCommand(testCmd)
 	rootCmd.AddCommand(exportCmd)
 	rootCmd.AddCommand(generateCmd)
-	rootCmd.SetArgs(m.Args[1:])
 
-	return rootCmd.Execute()
+	return rootCmd
 }
