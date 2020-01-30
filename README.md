@@ -1,10 +1,21 @@
 # Variant 2
 
-This repository contains a development branch of the second major version of [Variant](https://github.com/mumoshu/variant).
+> This repository contains a development branch of the second major version of [Variant](https://github.com/mumoshu/variant).
+> 
+> See https://github.com/mumoshu/variant for more information on the first version.
+> 
+> Once finished, this repository will eventually take over the `master` branch of the original [variant repository](https://github.com/mumoshu/variant).
 
-See https://github.com/mumoshu/variant for more information on the first version.
+# Features
 
-Once finished, this repository will eventually take over the `master` branch of the original [variant repository](https://github.com/mumoshu/variant).
+- **HCL-based DSL**: Terraform-like strongly-typed DSL on top of HCL to define your command. See `Configuration Language` below.
+- **Concurrency and Workflow**: Embedded workflow engine with concurrency. See [`Concurrency`](https://github.com/mumoshu/variant2#concurrency) below. Example: [concurrency](https://github.com/mumoshu/variant2/tree/master/examples/concurrency)
+- **Configs**: Deep-merging YAML configuration files. Example: [config](https://github.com/mumoshu/variant2/tree/master/examples/config)
+- **Secrets**: Deep-merging secret values from Vault, AWS SecretsManager, SOPS, etc. powered by [vals](https://github.com/variantdev/vals). Example: [secret](https://github.com/mumoshu/variant2/tree/master/examples/secret)
+- **Testing**: Test framework with `go test`-compatible test runner. Example: [simple](https://github.com/mumoshu/variant2/tree/master/examples/simple)
+- **Embeddable**: Easy embedding in any Golang application
+- **Easy distribution**: Build a single-executable of your command with Golang
+- **Dependency Management**: Dependent files, executable binaries and docker-run shims can be automatically installed and updated with the [variantdev/mod](https://github.com/variantdev/mod) integration. Example: [module](https://github.com/mumoshu/variant2/tree/master/examples/module)
 
 # Getting Started
 
@@ -118,17 +129,6 @@ Head over to the following per-topic sections for more features:
 - [Concurrency](#concurrency) section to make `kubectl` and `helm` concurrent so that the installation time becomes minimal
 - [Log Collection](#log-collection) to filter and forward log of commands and the arguments passed to them along with their outputs
 - Use [Split, Merge and Import](#split-merge-and-import) to split, compose and tidy Variant commands
-
-# Features
-
-- **HCL-based DSL**: Terraform-like strongly-typed DSL on top of HCL to define your command. See `Configuration Language` below.
-- **Concurrency and Workflow**: Embedded workflow engine with concurrency. See [`Concurrency`](https://github.com/mumoshu/variant2#concurrency) below. Example: [concurrency](https://github.com/mumoshu/variant2/tree/master/examples/concurrency)
-- **Configs**: Deep-merging YAML configuration files. Example: [config](https://github.com/mumoshu/variant2/tree/master/examples/config)
-- **Secrets**: Deep-merging secret values from Vault, AWS SecretsManager, SOPS, etc. powered by [vals](https://github.com/variantdev/vals). Example: [secret](https://github.com/mumoshu/variant2/tree/master/examples/secret)
-- **Testing**: Test framework with `go test`-compatible test runner. Example: [simple](https://github.com/mumoshu/variant2/tree/master/examples/simple)
-- **Embeddable**: Easy embedding in any Golang application
-- **Easy distribution**: Build a single-executable of your command with Golang
-- **Dependency Management**: Dependent files, executable binaries and docker-run shims can be automatically installed and updated with the [variantdev/mod](https://github.com/variantdev/mod) integration. Example: [module](https://github.com/mumoshu/variant2/tree/master/examples/module)
 
 ## Generating Shims
 
