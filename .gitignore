@@ -3,3 +3,5 @@
 examples/module/.variant
 variant
 bin/golangci-lint
+bin/goimports
+\#*#
