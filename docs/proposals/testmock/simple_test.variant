@@ -16,7 +16,7 @@ EOS
     err = ""
   }
 
-  // creates an executable command `mocks/kubectl/kubectl` where `${command.kubectl.dir}` returns `mocks/kubectl`
+  // creates an executable command `TMP_DIR/kubectl/kubectl` where `${command.kubectl.dir}` returns `TMP_DIR/kubectl`
   command "kubectl" {
     option namespace {
       type = string
