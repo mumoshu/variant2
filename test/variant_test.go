@@ -158,11 +158,10 @@ func TestNewDirCobra(t *testing.T) {
 
 	cmd.SetArgs([]string{"app", "deploy", "--namespace=default"})
 
-	if cmd.Execute(); err != nil {
+	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
 }
-
 
 // variant.(Must)Eval creates a Variant command from the virtual file name and the source code written in the Variant DSL
 // variant.(Must)Load creates a Variant command from a file or a directory

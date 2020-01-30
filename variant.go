@@ -3,10 +3,6 @@ package variant
 import (
 	"errors"
 	"fmt"
-	"github.com/hashicorp/hcl/v2/ext/typeexpr"
-	"github.com/mumoshu/variant2/pkg/app"
-	"github.com/spf13/cobra"
-	"github.com/zclconf/go-cty/cty"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,6 +10,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/hashicorp/hcl/v2/ext/typeexpr"
+	"github.com/mumoshu/variant2/pkg/app"
+	"github.com/spf13/cobra"
+	"github.com/zclconf/go-cty/cty"
 )
 
 var Version string
