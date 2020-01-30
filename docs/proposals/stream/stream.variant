@@ -1,0 +1,69 @@
+job "test" {
+  stream {
+    source "foo" {
+      # setting `file = "-"` tells Variant to fallback to stdin if the file attr is omitted or the file is not found
+      file = "foo.txt"
+    }
+
+    source "bar" {
+      file = "bar"
+    }
+
+    source "baz" {
+      file = "baz.txt"
+      # setting `file = ""` results in the job `baz` being run by Variant
+      run "baz" {
+
+      }
+
+      # retries up to 3 times on failure
+      retries = 3
+      # exponential backoff
+      backoff = (2 * seconds * pow(retry.number, 2))
+    }
+
+    # "latest" is the default and the only strategy at the moment that runs the job each time new input is arrived to any of the sources
+    #merge_strategy = "latest"
+
+    # Runs the job `print` up to 2 times per 0.1 second
+    # See https://github.com/golang/go/wiki/RateLimiting
+    rate = 1 * second / 10
+    burst_limit = 2
+
+    # Stops Variant with non-zero exit code after 10 seconds with no input frmo any source
+    timeout = 10 * seconds
+
+    # errors from `print` job doesn't stop this stream. set `until` to stop conditionally.
+    run "print" {
+      text = "foo=${source.foo.item}, bar=${source.bar.item}, baz=${source.baz.item}"
+    }
+
+    # Set `suceed_on = run.err == ""` to stop this stream with a successful exit code(=0) on the first successful run of the job `print`
+    #suceed_on = source.foo.closed && source.bar.closed && source.baz.closed
+
+    # source.*.error contains non-empty message string of the last error occurred for the source
+    #fail_on = source.foo.error != "" || source.bar.error != "" || source.baz.error != ""
+  }
+}
+
+job "print" {
+  parameter "text" {
+    type = string
+  }
+
+  exec {
+    command = "echo"
+    args = [param.text]
+  }
+}
+
+job "baz" {
+  parameter "text" {
+    type = string
+  }
+
+  exec {
+    command = "bash"
+    args = ["-c", "while sleep 1; do echo ${param.text}; done"]
+  }
+}
