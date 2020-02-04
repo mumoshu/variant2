@@ -7,13 +7,48 @@ job "test" {
 
     source "bar" {
       file = "bar"
+
+      # `poll_on_demand` denotes an infinite source that doesn't trigger update on its own
+      # with `cache_for = 10s` it fetches from the source only when it passed 10s after the last fetch.
+      #
+      # # defauls to invalidate_after = 0s which
+      # repeat_every = 0s
+      # invalidate_after = 10s
+      # #strategy = poll_on_demand
+      # read = "all"
+      # emit = false
+      #
+      # `periodic` denotes an infinite source that produces data for every interval passed
+      #
+      # repeat_every = 1s
+      # #strategy = periodic
+      # read = "all"
+      # line_rate = inf
+      # emit = true
+      #
+      #
+      # `once` denotes an (sometimes finite or possibly infinite) source that produces data from a file or a job run.
+      # If it was a file and the file reader reached to EOF, the stream is closed hence it was a finite source.
+      # If it was a job run and the job finished running, the stream is closed hence it was a finite source.
+      # If it was a job run and the job kept running forever, the stream is never closed hence it was an infinite source.
+      #
+      # #repeat_every = 0s
+      # #strategy = "once"
+      # read = "line"
+      # emit = true
+      #
+      # reads up to 10 lines per second
+      # #line_rate = 1 * second / 10
+      # read_every = 0.1s
     }
 
     source "baz" {
       file = "baz.txt"
       # setting `file = ""` results in the job `baz` being run by Variant
-      run "baz" {
-
+      job = {
+        name = "baz"
+        args = {
+        }
       }
 
       # retries up to 3 times on failure
@@ -27,15 +62,17 @@ job "test" {
 
     # Runs the job `print` up to 2 times per 0.1 second
     # See https://github.com/golang/go/wiki/RateLimiting
-    rate = 1 * second / 10
+    rate_limit = 1 * second / 10
     burst_limit = 2
 
     # Stops Variant with non-zero exit code after 10 seconds with no input frmo any source
     timeout = 10 * seconds
 
     # errors from `print` job doesn't stop this stream. set `until` to stop conditionally.
-    run "print" {
-      text = "foo=${source.foo.item}, bar=${source.bar.item}, baz=${source.baz.item}"
+    flow {
+        run "print" {
+          text = "foo=${source.foo.item}, bar=${source.bar.item}, baz=${source.baz.item}"
+        }
     }
 
     # Set `suceed_on = run.err == ""` to stop this stream with a successful exit code(=0) on the first successful run of the job `print`
