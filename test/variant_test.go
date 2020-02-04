@@ -2,6 +2,7 @@ package test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"testing"
 
@@ -54,27 +55,41 @@ func TestNewFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//myapp.Job("foo bar", func(outWriter, errWriter io.WriteCloser, args func(interface{}) error) error {
-	//	defer outWriter.Close()
-	//	defer errWriter.Close()
-	//
-	//	parsed := struct{
-	//		A string
-	//		B string
-	//	}{}
-	//
-	//	if err := args(&parsed); err != nil {
-	//		return err
-	//	}
-	//
-	//	if _, err := outWriter.Write([]byte("OUTPUT")); err != nil {
-	//		return err
-	//	}
-	//
-	//	if _, err := errWriter.Write([]byte("ERROR")); err != nil {
-	//		return err
-	//	}
-	//})
+	// outWriter and errWriter are automatically closed by Variant core after the calling anonymous func
+	// to avoid leaking
+	myapp.Add(
+		variant.Job{
+			Name:        "foo bar",
+			Description: "foobar",
+			Options: map[string]variant.Option{
+				"namespace": {
+					Type:        "string",
+					Description: "namespace",
+				},
+			},
+			Run: func(ctx context.Context, s variant.State) error {
+				ns := s.Args["namespace"].(string)
+				j, err := myapp.Job("bar baz", variant.JobOptions{Args: map[string]interface{}{"namespace": ns}})
+
+				if err != nil {
+					return err
+				}
+
+				if err := j.Run(ctx); err != nil {
+					return err
+				}
+
+				if _, err := s.Stdout.Write([]byte("OUTPUT")); err != nil {
+					return err
+				}
+
+				if _, err := s.Stderr.Write([]byte("ERROR: ")); err != nil {
+					return err
+				}
+
+				return nil
+			},
+		})
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}

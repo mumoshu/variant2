@@ -565,6 +565,14 @@ type RunOptions struct {
 	Stderr io.Writer
 }
 
+func (r Runner) Add(job Job) {
+
+}
+
+func (r Runner) Job(job string, opts JobOptions) (*JobRun, error) {
+	return nil, nil
+}
+
 func (r Runner) Run(arguments []string, opt ...RunOptions) error {
 	r.mut.Lock()
 	defer r.mut.Unlock()
