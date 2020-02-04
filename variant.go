@@ -565,10 +565,12 @@ type RunOptions struct {
 	Stderr io.Writer
 }
 
+// Add adds a job to this runner so that it can later by calling `Job`
 func (r Runner) Add(job Job) {
 
 }
 
+// Job prepares a job to be run
 func (r Runner) Job(job string, opts JobOptions) (*JobRun, error) {
 	return nil, nil
 }
