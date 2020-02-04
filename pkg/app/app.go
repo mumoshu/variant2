@@ -419,100 +419,112 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 	return app.run(nil, cmd, args, opts)
 }
 
-func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}) (*Result, error) {
+func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}) (func() (*Result, error), error) {
 	jobByName := app.JobByName
-	cc := app.Config
 
 	j, ok := jobByName[cmd]
 	if !ok {
 		j, ok = jobByName[""]
 		if !ok {
-			panic(fmt.Errorf("command %q not found", cmd))
+			return nil, fmt.Errorf("command %q not found", cmd)
 		}
 	}
 
-	jobCtx, err := createJobContext(cc, j, args, opts)
+	return func() (*Result, error) {
+		cc := app.Config
 
-	if err != nil {
-		app.PrintError(err)
-		return nil, err
-	}
+		jobCtx, err := createJobContext(cc, j, args, opts)
 
-	if l == nil {
-		l = NewEventLogger(cmd, args, opts)
-	}
-
-	if j.Log != nil && j.Log.Collects != nil && j.Log.Forwards != nil && len(j.Log.Forwards) > 0 {
-		var file string
-
-		if j.Log.File.Range().Start != j.Log.File.Range().End {
-			if diags := gohcl2.DecodeExpression(j.Log.File, jobCtx, &file); diags.HasErrors() {
-				return nil, diags
-			}
-		}
-
-		logCollector := app.newLogCollector(file, j, jobCtx)
-		unregister := l.Register(logCollector)
-
-		defer func() {
-			if err := unregister(); err != nil {
-				panic(err)
-			}
-		}()
-	}
-
-	conf, err := app.getConfigs(jobCtx, cc, j, "config", func(j JobSpec) []Config { return j.Configs }, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	jobCtx.Variables["conf"] = conf
-
-	secretRefsEvaluator, err := vals.New(vals.Options{CacheSize: 100})
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize vals: %v", err)
-	}
-
-	sec, err := app.getConfigs(jobCtx, cc, j, "secret", func(j JobSpec) []Config { return j.Secrets }, func(m map[string]interface{}) (map[string]interface{}, error) {
-		return secretRefsEvaluator.Eval(m)
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	jobCtx.Variables["sec"] = sec
-
-	needs := map[string]cty.Value{}
-
-	var concurrency int
-
-	if !IsExpressionEmpty(j.Concurrency) {
-		if err := gohcl2.DecodeExpression(j.Concurrency, jobCtx, &concurrency); err != nil {
+		if err != nil {
+			app.PrintError(err)
 			return nil, err
 		}
 
-		if concurrency < 1 {
-			return nil, fmt.Errorf("concurrency less than 1 can not be set. If you wanted %d for a concurrency equals to the number of steps, is isn't a good idea. Some system has a relatively lower fd limit that can make your command fail only when there are too many steps. Always use static number of concurrency", concurrency)
+		if l == nil {
+			l = NewEventLogger(cmd, args, opts)
 		}
-	} else {
-		concurrency = 1
+
+		if j.Log != nil && j.Log.Collects != nil && j.Log.Forwards != nil && len(j.Log.Forwards) > 0 {
+			var file string
+
+			if j.Log.File.Range().Start != j.Log.File.Range().End {
+				if diags := gohcl2.DecodeExpression(j.Log.File, jobCtx, &file); diags.HasErrors() {
+					return nil, diags
+				}
+			}
+
+			logCollector := app.newLogCollector(file, j, jobCtx)
+			unregister := l.Register(logCollector)
+
+			defer func() {
+				if err := unregister(); err != nil {
+					panic(err)
+				}
+			}()
+		}
+
+		conf, err := app.getConfigs(jobCtx, cc, j, "config", func(j JobSpec) []Config { return j.Configs }, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		jobCtx.Variables["conf"] = conf
+
+		secretRefsEvaluator, err := vals.New(vals.Options{CacheSize: 100})
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize vals: %v", err)
+		}
+
+		sec, err := app.getConfigs(jobCtx, cc, j, "secret", func(j JobSpec) []Config { return j.Secrets }, func(m map[string]interface{}) (map[string]interface{}, error) {
+			return secretRefsEvaluator.Eval(m)
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		jobCtx.Variables["sec"] = sec
+
+		needs := map[string]cty.Value{}
+
+		var concurrency int
+
+		if !IsExpressionEmpty(j.Concurrency) {
+			if err := gohcl2.DecodeExpression(j.Concurrency, jobCtx, &concurrency); err != nil {
+				return nil, err
+			}
+
+			if concurrency < 1 {
+				return nil, fmt.Errorf("concurrency less than 1 can not be set. If you wanted %d for a concurrency equals to the number of steps, is isn't a good idea. Some system has a relatively lower fd limit that can make your command fail only when there are too many steps. Always use static number of concurrency", concurrency)
+			}
+		} else {
+			concurrency = 1
+		}
+
+		{
+			res, err := app.execJobSteps(l, jobCtx, needs, j.Steps, concurrency)
+			if res != nil || err != nil {
+				return res, err
+			}
+		}
+
+		{
+			r, err := app.execJob(l, j, jobCtx)
+			if r == nil && err == nil {
+				return nil, fmt.Errorf(NoRunMessage)
+			}
+			return r, err
+		}
+	}, nil
+}
+
+func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}) (*Result, error) {
+	jr, err := app.Job(l, cmd, args, opts)
+	if err != nil {
+		return nil, err
 	}
 
-	{
-		res, err := app.execJobSteps(l, jobCtx, needs, j.Steps, concurrency)
-		if res != nil || err != nil {
-			return res, err
-		}
-	}
-
-	{
-		r, err := app.execJob(l, j, jobCtx)
-		if r == nil && err == nil {
-			return nil, fmt.Errorf(NoRunMessage)
-		}
-		return r, err
-	}
+	return jr()
 }
 
 func (app *App) WriteDiags(diagnostics hcl2.Diagnostics) {

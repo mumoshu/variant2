@@ -6,35 +6,34 @@ import (
 )
 
 type State struct {
-	Stdin  io.Reader
-	Args   map[string]interface{}
-	Stdout io.WriteCloser
-	Stderr io.WriteCloser
+	Stdin      io.Reader
+	Parameters map[string]interface{}
+	Options    map[string]interface{}
+	Stdout     io.WriteCloser
+	Stderr     io.WriteCloser
 }
 
 type Job struct {
 	Name        string
 	Description string
-	Options     map[string]Option
+	Options     map[string]Variable
+	Parameters  map[string]Variable
 	Run         func(context.Context, State) error
 }
 
-type Option struct {
-	Type        string
+type Type int
+
+const (
+	String Type = iota
+	Int
+	StringSlice
+	IntSlice
+	Bool
+)
+
+type Variable struct {
+	Type        Type
 	Description string
 }
 
-type JobOptions struct {
-	Stdout io.Writer
-	Stderr io.Writer
-	Args   map[string]interface{}
-}
-
-type JobRun struct {
-	Job     Job
-	Options JobOptions
-}
-
-func (j *JobRun) Run(ctx context.Context) error {
-	return nil
-}
+type JobRun func(context.Context) error

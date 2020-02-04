@@ -1,6 +1,7 @@
 package variant
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -441,7 +442,58 @@ func (m Main) newRunner(ap *app.App, cmdName string) *Runner {
 		runCmdName: cmdName,
 	}
 
+	m.initRunner(m2)
+
 	return m2
+}
+
+func (m Main) initRunner(r *Runner) {
+	r.goJobs = map[string]Job{}
+	r.jobRunProviders = map[string]func(State) JobRun{}
+
+	for jobName := range r.ap.JobByName {
+		n := jobName
+
+		r.jobRunProviders[n] = func(st State) JobRun {
+			return func(ctx context.Context) error {
+				if st.Stdout != nil {
+					defer func() {
+						if err := st.Stdout.Close(); err != nil {
+							panic(err)
+						}
+					}()
+				}
+
+				if st.Stderr != nil {
+					defer func() {
+						if err := st.Stderr.Close(); err != nil {
+							panic(err)
+						}
+					}()
+				}
+
+				r, err := r.ap.Run(n, st.Parameters, st.Options)
+
+				if err != nil {
+					return err
+				}
+
+				if st.Stdout != nil {
+					if _, err := st.Stdout.Write([]byte(r.Stdout)); err != nil {
+						return err
+					}
+				}
+
+				if st.Stderr != nil {
+					if _, err := st.Stderr.Write([]byte(r.Stderr)); err != nil {
+						return err
+					}
+				}
+
+				return nil
+			}
+		}
+	}
 }
 
 type Runner struct {
@@ -450,6 +502,9 @@ type Runner struct {
 
 	runCmd     *cobra.Command
 	variantCmd *cobra.Command
+
+	goJobs          map[string]Job
+	jobRunProviders map[string]func(State) JobRun
 
 	mut *sync.Mutex
 }
@@ -567,12 +622,29 @@ type RunOptions struct {
 
 // Add adds a job to this runner so that it can later by calling `Job`
 func (r Runner) Add(job Job) {
+	r.goJobs[job.Name] = job
 
+	if job.Name == "" {
+		panic(fmt.Errorf("invalid job name %q", job.Name))
+	}
+
+	r.jobRunProviders[job.Name] = func(st State) JobRun {
+		return func(ctx context.Context) error {
+			return job.Run(ctx, st)
+		}
+	}
 }
 
 // Job prepares a job to be run
-func (r Runner) Job(job string, opts JobOptions) (*JobRun, error) {
-	return nil, nil
+func (r Runner) Job(job string, opts State) (JobRun, error) {
+	f, ok := r.jobRunProviders[job]
+	if !ok {
+		return nil, fmt.Errorf("job %q not added", job)
+	}
+
+	jr := f(opts)
+
+	return jr, nil
 }
 
 func (r Runner) Run(arguments []string, opt ...RunOptions) error {
