@@ -53,6 +53,11 @@ func exportWithShim(variantBin string, files map[string]*hcl.File, dstDir string
 }
 
 func GenerateShim(variantBin, dir string) error {
+	var err error
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
 	binName := filepath.Base(dir)
 	binPath := filepath.Join(dir, binName)
 
