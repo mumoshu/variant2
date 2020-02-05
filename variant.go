@@ -642,6 +642,14 @@ func (r Runner) Job(job string, opts State) (JobRun, error) {
 		return nil, fmt.Errorf("job %q not added", job)
 	}
 
+	if opts.Options == nil {
+		opts.Options = map[string]interface{}{}
+	}
+
+	if opts.Parameters == nil {
+		opts.Parameters = map[string]interface{}{}
+	}
+
 	jr := f(opts)
 
 	return jr, nil
@@ -740,19 +748,23 @@ func (r *Runner) createVariantRootCommand() *cobra.Command {
 		Use:   "export SUBCOMMAND SRC_DIR OUTPUT_PATH",
 		Short: "Export the Variant command defined in SRC_DIR to OUTPUT_PATH",
 	}
-	shimCmd := &cobra.Command{
-		Use:   "shim SRC_DIR DST_DIR",
-		Short: "Copy and generate shim for the Variant command defined in the SRC",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(c *cobra.Command, args []string) error {
-			err := r.ap.ExportShim(args[0], args[1])
-			if err != nil {
-				c.SilenceUsage = true
-			}
-			return err
-		},
+	{
+		shimCmd := &cobra.Command{
+			Use:   "shim SRC_DIR DST_DIR",
+			Short: "Copy and generate shim for the Variant command defined in the SRC",
+			Args:  cobra.ExactArgs(2),
+			RunE: func(c *cobra.Command, args []string) error {
+				err := r.ap.ExportShim(args[0], args[1])
+				if err != nil {
+					c.SilenceUsage = true
+				}
+				return err
+			},
+		}
+
+		exportCmd.AddCommand(shimCmd)
+		exportCmd.AddCommand(newExportGo(r))
 	}
-	exportCmd.AddCommand(shimCmd)
 
 	generateCmd := &cobra.Command{
 		Use:   "generate RESOURCE DIR",
@@ -771,6 +783,7 @@ func (r *Runner) createVariantRootCommand() *cobra.Command {
 				return err
 			},
 		}
+
 		generateCmd.AddCommand(generateShimCmd)
 	}
 

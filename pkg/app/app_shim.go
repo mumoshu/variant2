@@ -6,11 +6,84 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 
 	"github.com/mumoshu/variant2/pkg/conf"
 )
+
+func (app *App) ExportGo(srcDir, dstDir string) error {
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return err
+	}
+
+	files, _, err := newConfigFromDir(srcDir)
+	if err != nil {
+		return err
+	}
+
+	merged, err := merge(files)
+	if err != nil {
+		return err
+	}
+
+	backquote := "<<<backquote>>>"
+
+	code := []byte(fmt.Sprintf(`package main
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+
+	variant "github.com/mumoshu/variant2"
+)
+
+func main() {
+	source := strings.Replace(%s, "`+backquote+`", "`+"`"+`", -1)
+
+	var args []string
+
+	if len(os.Args) > 1 {
+		args = os.Args[1:]
+	}
+
+	bin := filepath.Base(os.Args[0])
+
+	err := variant.MustEval(bin, source).Run(args)
+
+	var verr variant.Error
+
+	var code int
+
+	if err != nil {
+		if ok := errors.As(err, &verr); ok {
+			code = verr.ExitCode
+		} else {
+			code = 1
+		}
+	} else {
+		code = 0
+	}
+
+	os.Exit(code)
+}
+`, "`"+strings.Replace(string(merged)+"\n", "`", backquote, -1)+"`"))
+
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return err
+	}
+
+	exportDir := filepath.Join(dstDir, "main.go")
+
+	if err := ioutil.WriteFile(exportDir, code, 0644); err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func (app *App) ExportShim(srcDir, dstDir string) error {
 	if err := os.MkdirAll(dstDir, 0755); err != nil {
@@ -32,20 +105,34 @@ func (app *App) ExportShim(srcDir, dstDir string) error {
 	return exportWithShim(binName, files, dstDir)
 }
 
+func merge(files map[string]*hcl.File) ([]byte, error) {
+	buf := bytes.Buffer{}
+
+	for _, file := range files {
+		if _, err := buf.Write(file.Bytes); err != nil {
+			return nil, err
+		}
+
+		if _, err := buf.Write([]byte("\n")); err != nil {
+			return nil, err
+		}
+	}
+
+	return buf.Bytes(), nil
+}
+
 func exportWithShim(variantBin string, files map[string]*hcl.File, dstDir string) error {
 	binName := filepath.Base(dstDir)
 
 	binPath := filepath.Join(dstDir, binName)
 	cfgPath := filepath.Join(dstDir, binName+conf.VariantFileExt)
 
-	buf := bytes.Buffer{}
-
-	for _, file := range files {
-		buf.Write(file.Bytes)
-		buf.Write([]byte("\n"))
+	bs, err := merge(files)
+	if err != nil {
+		return err
 	}
 
-	if err := ioutil.WriteFile(cfgPath, buf.Bytes(), 0644); err != nil {
+	if err := ioutil.WriteFile(cfgPath, bs, 0644); err != nil {
 		return err
 	}
 

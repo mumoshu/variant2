@@ -25,3 +25,11 @@ lint: bin/golangci-lint
 	  --disable gochecknoglobals \
 	  --disable gochecknoinits \
 	  --disable gomnd,funlen,prealloc,gocritic,lll,gocognit
+
+.PHONY: smoke
+smoke: build
+	make build
+	./variant export go examples/simple build/simple
+	go build -o build/simple/simple ./build/simple
+	build/simple/simple -h | tee smoke.log
+	grep "Namespace to interact with" smoke.log

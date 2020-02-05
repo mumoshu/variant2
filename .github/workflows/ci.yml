@@ -23,4 +23,4 @@ jobs:
         which kubectl
         sudo apt-get update -y
         sudo apt-get install ruby -y
-        make test
+        make test smoke
