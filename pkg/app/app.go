@@ -199,6 +199,7 @@ type JobSpec struct {
 
 type LogSpec struct {
 	File     hcl2.Expression `hcl:"file,attr"`
+	Stream   hcl2.Expression `hcl:"stream,attr"`
 	Collects []Collect       `hcl:"collect,block"`
 	Forwards []Forward       `hcl:"forward,block"`
 }
@@ -442,6 +443,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 
 		if l == nil {
 			l = NewEventLogger(cmd, args, opts)
+			l.Stderr = app.Stderr
 		}
 
 		if j.Log != nil && j.Log.Collects != nil && j.Log.Forwards != nil && len(j.Log.Forwards) > 0 {
@@ -461,6 +463,20 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 					panic(err)
 				}
 			}()
+
+			{
+				var stream string
+
+				if j.Log.Stream.Range().Start != j.Log.Stream.Range().End {
+					if diags := gohcl2.DecodeExpression(j.Log.Stream, jobCtx, &stream); diags.HasErrors() {
+						return nil, diags
+					}
+				}
+
+				if stream != "" {
+					l.Stream = stream
+				}
+			}
 		}
 
 		conf, err := app.getConfigs(jobCtx, cc, j, "config", func(j JobSpec) []Config { return j.Configs }, nil)

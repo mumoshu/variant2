@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"strings"
 	"sync"
@@ -100,6 +101,10 @@ type EventLogger struct {
 	Command    string
 	Args, Opts map[string]interface{}
 
+	Stream string
+
+	Stderr io.Writer
+
 	Events []Event
 
 	collectors map[int]*LogCollector
@@ -141,8 +146,15 @@ func (l *EventLogger) append(evt Event) error {
 	defer l.collectorsMutex.Unlock()
 
 	for _, c := range l.collectors {
-		if err := c.Collect(evt); err != nil {
+		line, err := c.Collect(evt)
+		if err != nil {
 			return err
+		}
+
+		if l.Stream == "stderr" {
+			if _, err := l.Stderr.Write([]byte(*line + "\n")); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -177,7 +189,9 @@ func (l *EventLogger) Register(logCollector LogCollector) func() error {
 			return err
 		}
 
-		log := Log{File: file}
+		log := Log{
+			File: file,
+		}
 
 		return logCollector.ForwardFn(log)
 	}
@@ -194,10 +208,10 @@ type LogCollector struct {
 	lines     []string
 }
 
-func (c *LogCollector) Collect(evt Event) error {
+func (c *LogCollector) Collect(evt Event) (*string, error) {
 	text, shouldCollect, err := c.CollectFn(evt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if shouldCollect {
@@ -208,5 +222,5 @@ func (c *LogCollector) Collect(evt Event) error {
 		c.lines = append(c.lines, *text)
 	}
 
-	return nil
+	return text, nil
 }

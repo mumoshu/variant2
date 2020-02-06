@@ -36,6 +36,9 @@ job "test" {
       format = "run=${jsonencode(event.run)}"
     }
 
+    # When `stream = "stderr" is set, every log event that matched any collect condition is written to stderr as well
+    stream = "stderr"
+
     file = "${context.sourcedir}/log.txt"
 
     forward {
