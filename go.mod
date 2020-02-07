@@ -15,7 +15,7 @@ require (
 	github.com/variantdev/dag v0.0.0-20191028002400-bb0b3c785363
 	github.com/variantdev/mod v0.10.2
 	github.com/variantdev/vals v0.0.0-20191123083656-fc61ba6e8746
-	github.com/zclconf/go-cty v1.2.0
+	github.com/zclconf/go-cty v1.2.1
 	github.com/zclconf/go-cty-yaml v1.0.1
 	golang.org/x/tools v0.0.0-20191026034945-b2104f82a97d
 	gopkg.in/yaml.v2 v2.2.2

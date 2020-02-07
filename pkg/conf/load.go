@@ -23,12 +23,18 @@ func FindVariantFiles(path string) ([]string, error) {
 	}
 
 	if fi.IsDir() {
-		found, err := filepath.Glob(filepath.Join(path, "*"+VariantFileExt))
+		found, err := filepath.Glob(filepath.Join(path, "*"+VariantFileExt+"*"))
 		if err != nil {
 			return nil, err
 		}
 
 		for _, f := range found {
+			switch filepath.Ext(f) {
+			case VariantFileExt, ".json":
+			default:
+				continue
+			}
+
 			info, err := os.Stat(f)
 
 			if err != nil {
@@ -46,7 +52,7 @@ func FindVariantFiles(path string) ([]string, error) {
 	}
 
 	switch filepath.Ext(path) {
-	case VariantFileExt:
+	case VariantFileExt, ".json":
 		files = append(files, path)
 	}
 

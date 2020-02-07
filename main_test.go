@@ -136,6 +136,12 @@ func TestExamples(t *testing.T) {
 			wd:          "./examples/options",
 		},
 		{
+			subject:     "options-json",
+			variantName: "",
+			args:        []string{"variant", "test"},
+			wd:          "./examples/options-json",
+		},
+		{
 			subject: "shebang",
 			args:    []string{"variant", "./test/shebang/myapp/myapp", "test", "--int1", "1", "--ints1", "1,2", "--str1", "a", "--strs1", "b,c"},
 			wd:      "./test",

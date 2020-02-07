@@ -129,6 +129,7 @@ Head over to the following per-topic sections for more features:
 - [Concurrency](#concurrency) section to make `kubectl` and `helm` concurrent so that the installation time becomes minimal
 - [Log Collection](#log-collection) to filter and forward log of commands and the arguments passed to them along with their outputs
 - Use [Split, Merge and Import](#split-merge-and-import) to split, compose and tidy Variant commands
+- [JSON Configuration Syntax](#json-configuration-syntax) can be used as an alternative to HCL2-based one
 
 ## Generating Shims
 
@@ -351,6 +352,12 @@ job "save-logs" {
 ```
 
 See the [logcollection](/examples/advanced/logcollection) example for the full declaration of this command for reference.
+
+## JSON Configuration Syntax
+
+`Variant` has a JSON-based dialect of its DSL. It's based on the HCL's build-in feature to natively support JSON, so the conversion rules between HCL and JSON is very similar to famous HCL-based language like [Terraform](https://www.terraform.io/docs/configuration/syntax-json.html).
+
+Generally speaking, you can use blocks, attributes and expressions with a little overhead. See the [options-json](/examples/options-json) example for more details.
 
 ## Configuration Language
 

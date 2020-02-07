@@ -1,0 +1,31 @@
+{
+  "option": {
+    "int1": {
+      "type": "number"
+    },
+    "ints1": {
+      "type": "list(number)"
+    },
+    "str1": {
+      "type": "string"
+    },
+    "strs1": {
+      "type": "list(string)"
+    }
+  },
+  "job": {
+    "test": {
+      "exec": {
+        "command": "echo",
+        "//": "somecomment. see how this works at https://www.terraform.io/docs/configuration/syntax-json.html#comment-properties",
+        "args": [
+          "${tostring(opt.int1)}",
+          "${tostring(opt.ints1[0])}",
+          "${tostring(opt.ints1[1])}",
+          "${opt.str1}",
+          "${join(\"|\", opt.strs1)}"
+        ]
+      }
+    }
+  }
+}

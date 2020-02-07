@@ -1133,6 +1133,11 @@ func getDefault(ctx cty.Value, def hcl2.Expression, tpe cty.Type) (*cty.Value, e
 			return nil, err
 		}
 
+		// Necessary for .variant.json support, where `r.Start != r.End` even for options and parameters without `default` attrs
+		if vv.Type() == cty.DynamicPseudoType {
+			return nil, nil
+		}
+
 		if vv.Type() != tpe {
 			return nil, errors.WithStack(fmt.Errorf("unexpected type of value %v provided: want %s, got %s", vv, tpe.FriendlyName(), vv.Type().FriendlyName()))
 		}
@@ -1414,12 +1419,25 @@ func getVarialbles(varCtx *hcl2.EvalContext, varSpecs []Variable) (cty.Value, er
 	return cty.ObjectVal(varFields), nil
 }
 
+func nonEmptyExpression(x hcl2.Expression) bool {
+	if x.Range().Start == x.Range().End {
+		return false
+	}
+
+	v, errs := x.Value(nil)
+	if errs != nil {
+		return true
+	}
+
+	return v.Type() != cty.DynamicPseudoType
+}
+
 func getModule(ctx *hcl2.EvalContext, m1, m2 hcl2.Expression) (cty.Value, error) {
 	var m hcl2.Expression
 
-	if m2.Range().Start != m2.Range().End {
+	if nonEmptyExpression(m2) {
 		m = m2
-	} else if m1.Range().Start != m1.Range().End {
+	} else if nonEmptyExpression(m1) {
 		m = m1
 	} else {
 		return cty.NilVal, nil
@@ -1459,5 +1477,5 @@ func getModule(ctx *hcl2.EvalContext, m1, m2 hcl2.Expression) (cty.Value, error)
 }
 
 func IsExpressionEmpty(ex hcl2.Expression) bool {
-	return ex.Range().Start == ex.Range().End
+	return !nonEmptyExpression(ex)
 }
