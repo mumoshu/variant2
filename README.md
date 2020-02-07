@@ -367,16 +367,59 @@ It is designed to allow concise descriptions of your command. The Variant langua
 
 In addition to everything available via the [native HCL syntax](https://github.com/hashicorp/hcl/blob/hcl2/hclsyntax/spec.md), Variant language provides the following HCL `blocks` and `functions` to declare your command.
 
-**Blocks**:
+### Blocks
 
-- Parameters
-- Options
-- Jobs
-- Tests
-- Exec's
-- Asserts
-- Runs
-- Steps
+#### job
+
+`job "CMD SUBCMD {}` is a job that can be run via `run "CMD SUBCMD" {}` or `variant run CMD SUBCMD`
+
+#### parameter
+
+`parameter "NAME" {}` is Nth positional argument to `job` that can be pased via `run "the job" { NAME = "val1" }` or `variant run the job val1`
+
+#### option
+
+`option "NAME" {}` is a named argument to `job` that can be passed via `run "the job" { NAME = "val1" }` or `varuant run the job --NAME val1`
+
+#### config
+
+`config "NAME" {}` is a layered configuration named `NAME`
+
+#### run
+
+`run` runs a job with args. `run` is available within `job` and `test`.
+
+```hcl
+job "a job" {
+  run "another job" {
+    param1 = "val1"
+    opt1 = "val2"
+  }
+}
+
+job "another job" {
+  parameter "param1" {
+    type = string
+  }
+  option "opt1" {
+    type = string
+  }
+
+  exec {
+    // ...
+  }
+}
+```
+
+#### step
+
+#### exec
+
+#### test
+
+`test "CMD1 SUBCMD1 {}` is unit test for `job "CMD1 SUBCMD1"`
+
+#### assert
 
 **Functions**:
 
