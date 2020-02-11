@@ -449,7 +449,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 		if j.Log != nil && j.Log.Collects != nil && j.Log.Forwards != nil && len(j.Log.Forwards) > 0 {
 			var file string
 
-			if j.Log.File.Range().Start != j.Log.File.Range().End {
+			if nonEmptyExpression(j.Log.File) {
 				if diags := gohcl2.DecodeExpression(j.Log.File, jobCtx, &file); diags.HasErrors() {
 					return nil, diags
 				}
@@ -467,7 +467,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			{
 				var stream string
 
-				if j.Log.Stream.Range().Start != j.Log.Stream.Range().End {
+				if nonEmptyExpression(j.Log.Stream) {
 					if diags := gohcl2.DecodeExpression(j.Log.Stream, jobCtx, &stream); diags.HasErrors() {
 						return nil, diags
 					}
@@ -1304,7 +1304,7 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 					args[k] = vv
 				}
 
-				res, err := app.Run(source.Name, args, args)
+				res, err := app.run(nil, source.Name, args, args)
 				if err != nil {
 					return cty.NilVal, err
 				}
