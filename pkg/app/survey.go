@@ -25,13 +25,13 @@ func makeQuestions(pendingOptions []PendingOption) ([]*survey.Question, map[stri
 
 		var msg string
 
+		var description string
+
 		if op.Spec.Description != nil {
-			msg = *op.Spec.Description
-		} else {
-			msg = name
+			description = *op.Spec.Description
 		}
 
-		msg = msg + "?"
+		msg = name
 
 		var validate survey.Validator
 
@@ -43,10 +43,12 @@ func makeQuestions(pendingOptions []PendingOption) ([]*survey.Question, map[stri
 		case cty.String:
 			prompt = &survey.Input{
 				Message: msg,
+				Help:    description,
 			}
 		case cty.Number:
 			prompt = &survey.Input{
 				Message: msg,
+				Help:    description,
 			}
 
 			transform = func(ans interface{}) (newAns interface{}) {
@@ -69,11 +71,13 @@ func makeQuestions(pendingOptions []PendingOption) ([]*survey.Question, map[stri
 		case cty.Bool:
 			prompt = &survey.Confirm{
 				Message: msg,
+				Help:    description,
 				Default: false,
 			}
 		case cty.List(cty.String):
 			prompt = &survey.Multiline{
 				Message: msg,
+				Help:    description,
 			}
 
 			transform = func(ans interface{}) (newAns interface{}) {
@@ -93,6 +97,7 @@ func makeQuestions(pendingOptions []PendingOption) ([]*survey.Question, map[stri
 		case cty.List(cty.Number):
 			prompt = &survey.Multiline{
 				Message: msg,
+				Help:    description,
 			}
 
 			transform = func(ans interface{}) (newAns interface{}) {

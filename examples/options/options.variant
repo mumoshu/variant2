@@ -1,17 +1,21 @@
 option "int1" {
   type = number
+  description = "The number to be referenced by $${opt.int1} e.g. 1, 2"
 }
 
 option "ints1" {
   type = list(number)
+  description = "The list of numbers to be referenced by $${opt.ints1} e.g. 1<NEWLINE>2<NEWLINE>"
 }
 
 option "str1" {
   type = string
+  description = "The string to be referenced by $${opt.sr1} e.g. a, b"
 }
 
 option "strs1" {
   type = list(string)
+  description = "The list of strings to be referenced by $${opt.strs1} e.g. b<NEWLINE>c<NEWLINE>"
 }
 
 job "test" {
