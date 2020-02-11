@@ -10,6 +10,7 @@
 
 - **HCL-based DSL**: Terraform-like strongly-typed DSL on top of HCL to define your command. See `Configuration Language` below.
 - **Concurrency and Workflow**: Embedded workflow engine with concurrency. See [`Concurrency`](https://github.com/mumoshu/variant2#concurrency) below. Example: [concurrency](https://github.com/mumoshu/variant2/tree/master/examples/concurrency)
+- **Auto-prompt**: Variant prompts for missing arguments to your command so that your user is only needed to provide missing arguments on the fly, instead of rerunning the whole command by repeating every argument.
 - **Configs**: Deep-merging YAML configuration files. Example: [config](https://github.com/mumoshu/variant2/tree/master/examples/config)
 - **Secrets**: Deep-merging secret values from Vault, AWS SecretsManager, SOPS, etc. powered by [vals](https://github.com/variantdev/vals). Example: [secret](https://github.com/mumoshu/variant2/tree/master/examples/secret)
 - **Testing**: Test framework with `go test`-compatible test runner. Example: [simple](https://github.com/mumoshu/variant2/tree/master/examples/simple)

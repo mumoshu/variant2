@@ -14,22 +14,23 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/imdario/mergo"
+	"github.com/variantdev/mod/pkg/variantmod"
+	ctyyaml "github.com/zclconf/go-cty-yaml"
+	"gopkg.in/yaml.v3"
+
 	multierror "github.com/hashicorp/go-multierror"
 	hcl2 "github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	gohcl2 "github.com/hashicorp/hcl/v2/gohcl"
 	hcl2parse "github.com/hashicorp/hcl/v2/hclparse"
-	"github.com/imdario/mergo"
 	"github.com/mumoshu/variant2/pkg/conf"
 	"github.com/pkg/errors"
 	"github.com/variantdev/dag/pkg/dag"
 	"github.com/variantdev/mod/pkg/shell"
-	"github.com/variantdev/mod/pkg/variantmod"
 	"github.com/variantdev/vals"
-	ctyyaml "github.com/zclconf/go-cty-yaml"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
-	yaml "gopkg.in/yaml.v2"
 )
 
 const NoRunMessage = "nothing to run"
@@ -416,11 +417,25 @@ func newApp(app *App, cc *HCL2Config, importBaseDir string, enableImports bool) 
 	return app, nil
 }
 
-func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]interface{}) (*Result, error) {
-	return app.run(nil, cmd, args, opts)
+func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]interface{}, interactive bool) (*Result, error) {
+	jr, err := app.Job(nil, cmd, args, opts, interactive)
+	if err != nil {
+		return nil, err
+	}
+
+	return jr()
 }
 
-func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}) (func() (*Result, error), error) {
+func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}) (*Result, error) {
+	jr, err := app.Job(l, cmd, args, opts, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return jr()
+}
+
+func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}, interactive bool) (func() (*Result, error), error) {
 	jobByName := app.JobByName
 
 	j, ok := jobByName[cmd]
@@ -434,7 +449,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 	return func() (*Result, error) {
 		cc := app.Config
 
-		jobCtx, err := createJobContext(cc, j, args, opts)
+		jobCtx, err := createJobContext(cc, j, args, opts, interactive)
 
 		if err != nil {
 			app.PrintError(err)
@@ -532,15 +547,6 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			return r, err
 		}
 	}, nil
-}
-
-func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}) (*Result, error) {
-	jr, err := app.Job(l, cmd, args, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	return jr()
 }
 
 func (app *App) WriteDiags(diagnostics hcl2.Diagnostics) {
@@ -1148,50 +1154,52 @@ func getDefault(ctx cty.Value, def hcl2.Expression, tpe cty.Type) (*cty.Value, e
 	return nil, nil
 }
 
-func getValueFor(ctx cty.Value, name string, typeExpr hcl2.Expression, defaultExpr hcl2.Expression, provided map[string]interface{}) (*cty.Value, error) {
+func getValueFor(ctx cty.Value, name string, typeExpr hcl2.Expression, defaultExpr hcl2.Expression, provided map[string]interface{}) (*cty.Value, *cty.Type, error) {
 	v := provided[name]
 
 	tpe, diags := typeexpr.TypeConstraint(typeExpr)
 	if diags != nil {
-		return nil, diags
+		return nil, nil, diags
 	}
 
 	switch v.(type) {
 	case nil:
 		vv, err := getDefault(ctx, defaultExpr, tpe)
 		if err != nil {
-			return nil, err
-		} else if vv == nil {
-			return nil, errors.New("missing value")
+			return nil, nil, err
 		}
 
-		return vv, nil
+		return vv, &tpe, nil
 	}
 
 	if vty, err := gocty.ImpliedType(v); err != nil {
-		return nil, err
+		return nil, nil, err
 	} else if vty != tpe {
-		return nil, fmt.Errorf("unexpected type. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
+		return nil, nil, fmt.Errorf("unexpected type. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
 	}
 
 	val, err := gocty.ToCtyValue(v, tpe)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &val, nil
+	return &val, &tpe, nil
 }
 
-func createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interface{}, givenOpts map[string]interface{}) (*hcl2.EvalContext, error) {
+func createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interface{}, givenOpts map[string]interface{}, interactive bool) (*hcl2.EvalContext, error) {
 	ctx := getContext(j.SourceLocator)
 
 	params := map[string]cty.Value{}
 
 	paramSpecs := append(append([]Parameter{}, cc.Parameters...), j.Parameters...)
 	for _, p := range paramSpecs {
-		v, err := getValueFor(ctx, p.Name, p.Type, p.Default, givenParams)
+		v, _, err := getValueFor(ctx, p.Name, p.Type, p.Default, givenParams)
 		if err != nil {
-			return nil, fmt.Errorf("job %q: parameter %q: %v", j.Name, p.Name, err)
+			return nil, fmt.Errorf("job %q: parameter %q: %w", j.Name, p.Name, err)
+		}
+
+		if v == nil {
+			return nil, fmt.Errorf("job %q: parameter %q: missing value", j.Name, p.Name)
 		}
 
 		params[p.Name] = *v
@@ -1199,14 +1207,34 @@ func createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interfac
 
 	opts := map[string]cty.Value{}
 
+	var pendingOptions []PendingOption
+
 	optSpecs := append(append([]OptionSpec{}, cc.Options...), j.Options...)
 	for _, op := range optSpecs {
-		v, err := getValueFor(ctx, op.Name, op.Type, op.Default, givenOpts)
+		v, tpe, err := getValueFor(ctx, op.Name, op.Type, op.Default, givenOpts)
 		if err != nil {
-			return nil, fmt.Errorf("job %q: option %q: %v", j.Name, op.Name, err)
+			return nil, fmt.Errorf("job %q: option %q: %w", j.Name, op.Name, err)
+		}
+
+		if v == nil {
+			if interactive {
+				opCopy := op
+
+				pendingOptions = append(pendingOptions, PendingOption{Spec: opCopy, Type: *tpe})
+			} else {
+				return nil, fmt.Errorf("job %q: parameter %q: missing value", j.Name, op.Name)
+			}
+
+			continue
 		}
 
 		opts[op.Name] = *v
+	}
+
+	if len(pendingOptions) > 0 {
+		if err := setOpts(opts, pendingOptions); err != nil {
+			return nil, fmt.Errorf("job %q: %w", j.Name, err)
+		}
 	}
 
 	varSpecs := append(append([]Variable{}, cc.Variables...), j.Variables...)

@@ -63,7 +63,7 @@ func TestExampleComplex(t *testing.T) {
 			args := tc.args
 			opts := tc.opts
 
-			_, err := app.Run(cmd, args, opts)
+			_, err := app.Run(cmd, args, opts, false)
 			if err != nil {
 				if tc.err == "" {
 					t.Errorf("unexpected error: %v", err)

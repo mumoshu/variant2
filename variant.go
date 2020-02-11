@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/mattn/go-isatty"
+
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/mumoshu/variant2/pkg/app"
 	"github.com/spf13/cobra"
@@ -118,7 +120,7 @@ type Config struct {
 	Options    func() map[string]func() interface{}
 }
 
-func valueOnChange(cli *cobra.Command, name string, v interface{}, def interface{}) func() interface{} {
+func valueOnChange(cli *cobra.Command, name string, v interface{}) func() interface{} {
 	return func() interface{} {
 		// This avoids setting "" when the flag is actually missing, so that
 		// we can differentiate between when (1)an empty string is specified vs (2)no flag is provided.
@@ -126,11 +128,11 @@ func valueOnChange(cli *cobra.Command, name string, v interface{}, def interface
 			return v
 		}
 
-		return def
+		return nil
 	}
 }
 
-func configureCommand(cli *cobra.Command, root app.JobSpec) (*Config, error) {
+func configureCommand(cli *cobra.Command, root app.JobSpec, interactive bool) (*Config, error) {
 	lazyOptionValues := map[string]func() interface{}{}
 
 	for i := range root.Options {
@@ -159,7 +161,7 @@ func configureCommand(cli *cobra.Command, root app.JobSpec) (*Config, error) {
 				cli.PersistentFlags().StringVar(&v, o.Name, "", desc)
 			}
 
-			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v, nil)
+			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v)
 		case cty.Bool:
 			var v bool
 
@@ -169,7 +171,7 @@ func configureCommand(cli *cobra.Command, root app.JobSpec) (*Config, error) {
 				cli.PersistentFlags().BoolVar(&v, o.Name, false, desc)
 			}
 
-			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v, &v)
+			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v)
 		case cty.Number:
 			var v int
 
@@ -179,7 +181,7 @@ func configureCommand(cli *cobra.Command, root app.JobSpec) (*Config, error) {
 				cli.PersistentFlags().IntVar(&v, o.Name, 0, desc)
 			}
 
-			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v, &v)
+			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v)
 		case cty.List(cty.String):
 			v := []string{}
 
@@ -189,7 +191,7 @@ func configureCommand(cli *cobra.Command, root app.JobSpec) (*Config, error) {
 				cli.PersistentFlags().StringSliceVar(&v, o.Name, []string{}, desc)
 			}
 
-			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v, &v)
+			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v)
 		case cty.List(cty.Number):
 			v := []int{}
 
@@ -199,10 +201,10 @@ func configureCommand(cli *cobra.Command, root app.JobSpec) (*Config, error) {
 				cli.PersistentFlags().IntSliceVar(&v, o.Name, []int{}, desc)
 			}
 
-			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v, &v)
+			lazyOptionValues[o.Name] = valueOnChange(cli, o.Name, &v)
 		}
 
-		if o.Default.Range().Start != o.Default.Range().End {
+		if !app.IsExpressionEmpty(o.Default) || interactive {
 
 		} else if err := cli.MarkPersistentFlagRequired(o.Name); err != nil {
 			panic(err)
@@ -472,7 +474,7 @@ func (m Main) initRunner(r *Runner) {
 					}()
 				}
 
-				r, err := r.ap.Run(n, st.Parameters, st.Options)
+				r, err := r.ap.Run(n, st.Parameters, st.Options, false)
 
 				if err != nil {
 					return err
@@ -537,6 +539,12 @@ func (r *Runner) Cobra() (*cobra.Command, error) {
 	commands := map[string]*cobra.Command{}
 	cfgs := map[string]*Config{}
 
+	siTty := isatty.IsTerminal(os.Stdin.Fd())
+	soTty := isatty.IsTerminal(os.Stdout.Fd())
+
+	// Enable prompts for missing inputs when stdin and stdout are connected to a tty
+	interactive := siTty && soTty
+
 	for _, n := range jobNames {
 		name := n
 		job := jobs[name]
@@ -583,7 +591,7 @@ func (r *Runner) Cobra() (*cobra.Command, error) {
 			Short: strings.Split(desc, "\n")[0],
 			Long:  desc,
 		}
-		cfg, err := configureCommand(cli, job)
+		cfg, err := configureCommand(cli, job, interactive)
 
 		if err != nil {
 			return nil, err
@@ -596,7 +604,7 @@ func (r *Runner) Cobra() (*cobra.Command, error) {
 				return err
 			}
 
-			_, err = ap.Run(job.Name, params, opts)
+			_, err = ap.Run(job.Name, params, opts, interactive)
 			if err != nil && err.Error() != app.NoRunMessage {
 				cmd.SilenceUsage = true
 			}
