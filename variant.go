@@ -764,6 +764,7 @@ func (r *Runner) createVariantRootCommand() *cobra.Command {
 
 		exportCmd.AddCommand(shimCmd)
 		exportCmd.AddCommand(newExportGo(r))
+		exportCmd.AddCommand(newExportBinary(r))
 	}
 
 	generateCmd := &cobra.Command{

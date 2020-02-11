@@ -33,3 +33,8 @@ smoke: build
 	go build -o build/simple/simple ./build/simple
 	build/simple/simple -h | tee smoke.log
 	grep "Namespace to interact with" smoke.log
+
+	rm build/simple/simple
+	./variant export binary examples/simple build/simple
+	build/simple/simple -h | tee smoke2.log
+	grep "Namespace to interact with" smoke2.log

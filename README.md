@@ -123,6 +123,24 @@ As you've seen in the help output, `variant run deploy` runs the `deploy` job, w
 $ variant run deploy
 ```
 
+Once you're finished developing the command, let's build a single executable binary of the command for easy distribution:
+
+```console
+$ variant export binary ./ build/myapp
+```
+
+The exported executable binary accepts the same arguments as `variant run`:
+
+```console
+$ ./build/myapp -h
+
+$ ./build/myapp run deploy
+```
+
+Congratulations! You're now ready to dive deep and solve your own problems with Variant.
+
+Still curious how Variant helps developing your own command as it grows?
+
 Head over to the following per-topic sections for more features:
 
 - [Generating Shims](#generating-shims) to make your Variant command look native

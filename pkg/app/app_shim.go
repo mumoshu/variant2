@@ -13,6 +13,33 @@ import (
 	"github.com/mumoshu/variant2/pkg/conf"
 )
 
+func (app *App) ExportBinary(srcDir, dstFile string) error {
+	tmpDir, err := ioutil.TempDir("", "variant-"+filepath.Base(srcDir))
+	if err != nil {
+		return err
+	}
+
+	defer os.RemoveAll(tmpDir)
+
+	if err := app.ExportGo(srcDir, tmpDir); err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dstFile), 0755); err != nil {
+		return err
+	}
+
+	absDstFile, err := filepath.Abs(dstFile)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = app.execCmd("sh", []string{"-c", fmt.Sprintf("cd %s; go mod init %s && go build -o %s %s", tmpDir, filepath.Base(srcDir), absDstFile, tmpDir)}, map[string]string{}, true)
+
+	return err
+}
+
 func (app *App) ExportGo(srcDir, dstDir string) error {
 	if err := os.MkdirAll(dstDir, 0755); err != nil {
 		return err
