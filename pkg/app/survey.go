@@ -15,10 +15,10 @@ type PendingOption struct {
 	Type cty.Type
 }
 
-func makeQuestions(pendingOptions []PendingOption) ([]*survey.Question, map[string]survey.Transformer, error) {
+func MakeQuestions(pendingOptions []PendingOption) ([]*survey.Question, map[string]survey.Transformer, error) {
 	qs := []*survey.Question{}
 
-	strTransformers := map[string]survey.Transformer{}
+	transformers := map[string]survey.Transformer{}
 
 	for _, op := range pendingOptions {
 		name := op.Spec.Name
@@ -147,15 +147,17 @@ func makeQuestions(pendingOptions []PendingOption) ([]*survey.Question, map[stri
 		})
 
 		if transform != nil {
-			strTransformers[name] = transform
+			transformers[name] = transform
 		}
 	}
 
-	return qs, strTransformers, nil
+	return qs, transformers, nil
 }
 
-func setOpts(opts map[string]cty.Value, pendingOptions []PendingOption) error {
-	qs, strTransformers, err := makeQuestions(pendingOptions)
+type SetOptsFunc func(opts map[string]cty.Value, pendingOptions []PendingOption) error
+
+func DefaultSetOpts(opts map[string]cty.Value, pendingOptions []PendingOption) error {
+	qs, transformers, err := MakeQuestions(pendingOptions)
 	if err != nil {
 		return err
 	}
@@ -166,8 +168,12 @@ func setOpts(opts map[string]cty.Value, pendingOptions []PendingOption) error {
 		return err
 	}
 
+	return SetOptsFromMap(transformers, opts, res)
+}
+
+func SetOptsFromMap(transformers map[string]survey.Transformer, opts map[string]cty.Value, res map[string]interface{}) error {
 	for k, v := range res {
-		t, ok := strTransformers[k]
+		t, ok := transformers[k]
 
 		var ans interface{}
 

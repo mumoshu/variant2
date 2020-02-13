@@ -17,6 +17,7 @@
 - **Embeddable**: Easy embedding in any Golang application
 - **Easy distribution**: Build a single-executable of your command with Golang
 - **Dependency Management**: Dependent files, executable binaries and docker-run shims can be automatically installed and updated with the [variantdev/mod](https://github.com/variantdev/mod) integration. Example: [module](https://github.com/mumoshu/variant2/tree/master/examples/module)
+- **Integrations**: Integrates nicely with Slack, GitHub. You can run Variant command in response to Slack message, GitHub issue comment, commit push, etc.
 
 # Getting Started
 
@@ -149,6 +150,7 @@ Head over to the following per-topic sections for more features:
 - [Log Collection](#log-collection) to filter and forward log of commands and the arguments passed to them along with their outputs
 - Use [Split, Merge and Import](#split-merge-and-import) to split, compose and tidy Variant commands
 - [JSON Configuration Syntax](#json-configuration-syntax) can be used as an alternative to HCL2-based one
+- [Slack integration](#slack-integration) to turn your command into a Slack bot
 
 ## Generating Shims
 
@@ -371,6 +373,44 @@ job "save-logs" {
 ```
 
 See the [logcollection](/examples/advanced/logcollection) example for the full declaration of this command for reference.
+
+## Slack integration
+
+Slack integration turns your Variant command into a Slack bot.
+
+The bot is installed onto a specific Slack channel as a Slack app to listen any message to trigger a command.
+
+Once you run:
+
+```
+SLACK_BOT_TOKEN=... SLACK_VERIFICATION_TOKEN=... variant start slackbot -n mycmd
+```
+
+in a directory that has a valid Variant command, it starts a RTM session to listen messages posted to the Slack channel.
+
+When a message starting with:
+
+```
+/mycmd
+```
+
+is posted to the channel, the bot inteprets
+
+```
+/mycmd <CMD> <FLAGS>
+```
+
+as:
+
+```
+variant run <CMD> <FLAGS>
+```
+
+and runs it.
+
+**Auto-prompting via interactive messages**
+
+One of cool features of the bot is that when you missed to specify values for certain options, it will automatically start a interactive session to let you select and input missing values within Slack. You don't need to remember all the flags nor repeat lengthy commands anymore.
 
 ## JSON Configuration Syntax
 

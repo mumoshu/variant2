@@ -356,7 +356,7 @@ func (m Main) Run() error {
 		return err
 	}
 
-	return r.Run(m.Args[1:], RunOptions{})
+	return r.Run(m.Args[1:], RunOptions{DisableLocking: true})
 }
 
 func (m Main) Runner() (*Runner, error) {
@@ -450,6 +450,16 @@ func (m Main) newRunner(ap *app.App, cmdName string) *Runner {
 }
 
 func (m Main) initRunner(r *Runner) {
+	siTty := isatty.IsTerminal(os.Stdin.Fd())
+	soTty := isatty.IsTerminal(os.Stdout.Fd())
+
+	// Enable prompts for missing inputs when stdin and stdout are connected to a tty
+	r.Interactive = siTty && soTty
+
+	if r.Interactive {
+		r.SetOpts = app.DefaultSetOpts
+	}
+
 	r.goJobs = map[string]Job{}
 	r.jobRunProviders = map[string]func(State) JobRun{}
 
@@ -474,7 +484,7 @@ func (m Main) initRunner(r *Runner) {
 					}()
 				}
 
-				r, err := r.ap.Run(n, st.Parameters, st.Options, false)
+				r, err := r.ap.Run(n, st.Parameters, st.Options)
 
 				if err != nil {
 					return err
@@ -508,6 +518,10 @@ type Runner struct {
 	goJobs          map[string]Job
 	jobRunProviders map[string]func(State) JobRun
 
+	Interactive bool
+
+	SetOpts app.SetOptsFunc
+
 	mut *sync.Mutex
 }
 
@@ -538,12 +552,6 @@ func (r *Runner) Cobra() (*cobra.Command, error) {
 
 	commands := map[string]*cobra.Command{}
 	cfgs := map[string]*Config{}
-
-	siTty := isatty.IsTerminal(os.Stdin.Fd())
-	soTty := isatty.IsTerminal(os.Stdout.Fd())
-
-	// Enable prompts for missing inputs when stdin and stdout are connected to a tty
-	interactive := siTty && soTty
 
 	for _, n := range jobNames {
 		name := n
@@ -591,7 +599,7 @@ func (r *Runner) Cobra() (*cobra.Command, error) {
 			Short: strings.Split(desc, "\n")[0],
 			Long:  desc,
 		}
-		cfg, err := configureCommand(cli, job, interactive)
+		cfg, err := configureCommand(cli, job, r.Interactive)
 
 		if err != nil {
 			return nil, err
@@ -604,7 +612,7 @@ func (r *Runner) Cobra() (*cobra.Command, error) {
 				return err
 			}
 
-			_, err = ap.Run(job.Name, params, opts, interactive)
+			_, err = ap.Run(job.Name, params, opts, r.SetOpts)
 			if err != nil && err.Error() != app.NoRunMessage {
 				cmd.SilenceUsage = true
 			}
@@ -626,6 +634,10 @@ func (r *Runner) Cobra() (*cobra.Command, error) {
 type RunOptions struct {
 	Stdout io.Writer
 	Stderr io.Writer
+
+	SetOpts app.SetOptsFunc
+
+	DisableLocking bool
 }
 
 // Add adds a job to this runner so that it can later by calling `Job`
@@ -663,14 +675,24 @@ func (r Runner) Job(job string, opts State) (JobRun, error) {
 	return jr, nil
 }
 
-func (r Runner) Run(arguments []string, opt ...RunOptions) error {
-	r.mut.Lock()
-	defer r.mut.Unlock()
-
+func (r *Runner) Run(arguments []string, opt ...RunOptions) error {
 	var opts RunOptions
 
 	if len(opt) > 0 {
 		opts = opt[0]
+	}
+
+	if !opts.DisableLocking {
+		r.mut.Lock()
+		defer r.mut.Unlock()
+	}
+
+	if opts.SetOpts != nil {
+		r.SetOpts = opts.SetOpts
+
+		defer func() {
+			r.SetOpts = nil
+		}()
 	}
 
 	if r.runCmd == nil {
@@ -796,10 +818,39 @@ func (r *Runner) createVariantRootCommand() *cobra.Command {
 		generateCmd.AddCommand(generateShimCmd)
 	}
 
+	startCmd := &cobra.Command{
+		Use:   "start NAME",
+		Short: "Start the named integration to turn the Variant command to whatever",
+	}
+	{
+		var botName string
+
+		startSlackbotCmd := &cobra.Command{
+			Use:   "slackbot",
+			Short: "Start the slackbot that responds to slash commands by running corresopnding Variant commands",
+			RunE: func(c *cobra.Command, args []string) error {
+				err := r.StartSlackbot(botName)
+				if err != nil {
+					c.SilenceUsage = true
+				}
+				return err
+			},
+		}
+
+		startSlackbotCmd.Flags().StringVarP(&botName, "name", "n", "", "Name of the slash command without /. For example, \"--name foo\" results in the bot responding to \"/foo <CMD> <ARGS>\"")
+
+		if err := startSlackbotCmd.MarkFlagRequired("name"); err != nil {
+			panic(err)
+		}
+
+		startCmd.AddCommand(startSlackbotCmd)
+	}
+
 	rootCmd.AddCommand(r.runCmd)
 	rootCmd.AddCommand(testCmd)
 	rootCmd.AddCommand(exportCmd)
 	rootCmd.AddCommand(generateCmd)
+	rootCmd.AddCommand(startCmd)
 
 	return rootCmd
 }

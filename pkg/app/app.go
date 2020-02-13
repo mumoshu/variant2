@@ -417,8 +417,13 @@ func newApp(app *App, cc *HCL2Config, importBaseDir string, enableImports bool) 
 	return app, nil
 }
 
-func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]interface{}, interactive bool) (*Result, error) {
-	jr, err := app.Job(nil, cmd, args, opts, interactive)
+func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]interface{}, fs ...SetOptsFunc) (*Result, error) {
+	var f SetOptsFunc
+	if len(fs) > 0 {
+		f = fs[0]
+	}
+
+	jr, err := app.Job(nil, cmd, args, opts, f)
 	if err != nil {
 		return nil, err
 	}
@@ -427,7 +432,7 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 }
 
 func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}) (*Result, error) {
-	jr, err := app.Job(l, cmd, args, opts, false)
+	jr, err := app.Job(l, cmd, args, opts, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -435,7 +440,7 @@ func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opt
 	return jr()
 }
 
-func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}, interactive bool) (func() (*Result, error), error) {
+func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}, f SetOptsFunc) (func() (*Result, error), error) {
 	jobByName := app.JobByName
 
 	j, ok := jobByName[cmd]
@@ -449,7 +454,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 	return func() (*Result, error) {
 		cc := app.Config
 
-		jobCtx, err := createJobContext(cc, j, args, opts, interactive)
+		jobCtx, err := app.createJobContext(cc, j, args, opts, f)
 
 		if err != nil {
 			app.PrintError(err)
@@ -1186,7 +1191,7 @@ func getValueFor(ctx cty.Value, name string, typeExpr hcl2.Expression, defaultEx
 	return &val, &tpe, nil
 }
 
-func createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interface{}, givenOpts map[string]interface{}, interactive bool) (*hcl2.EvalContext, error) {
+func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interface{}, givenOpts map[string]interface{}, f SetOptsFunc) (*hcl2.EvalContext, error) {
 	ctx := getContext(j.SourceLocator)
 
 	params := map[string]cty.Value{}
@@ -1217,7 +1222,7 @@ func createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interfac
 		}
 
 		if v == nil {
-			if interactive {
+			if f != nil {
 				opCopy := op
 
 				pendingOptions = append(pendingOptions, PendingOption{Spec: opCopy, Type: *tpe})
@@ -1232,7 +1237,7 @@ func createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interfac
 	}
 
 	if len(pendingOptions) > 0 {
-		if err := setOpts(opts, pendingOptions); err != nil {
+		if err := f(opts, pendingOptions); err != nil {
 			return nil, fmt.Errorf("job %q: %w", j.Name, err)
 		}
 	}
