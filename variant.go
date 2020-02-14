@@ -720,23 +720,33 @@ func (r *Runner) Run(arguments []string, opt ...RunOptions) error {
 	var err error
 
 	{
-		stdout := cmd.OutOrStdout()
-		stderr := cmd.OutOrStderr()
+		cmdStdout := cmd.OutOrStdout()
+		cmdStderr := cmd.OutOrStderr()
+
+		appStdout := r.ap.Stdout
+		appStderr := r.ap.Stderr
 
 		cmd.SetArgs(arguments)
 
 		if opts.Stdout != nil {
 			cmd.SetOut(opts.Stdout)
+
+			r.ap.Stdout = opts.Stdout
 		}
 
 		if opts.Stderr != nil {
 			cmd.SetErr(opts.Stderr)
+
+			r.ap.Stderr = opts.Stderr
 		}
 
 		err = cmd.Execute()
 
-		cmd.SetOut(stdout)
-		cmd.SetErr(stderr)
+		cmd.SetOut(cmdStdout)
+		cmd.SetErr(cmdStderr)
+
+		r.ap.Stdout = appStdout
+		r.ap.Stderr = appStderr
 	}
 
 	return err
