@@ -63,15 +63,22 @@ func (r *Runner) StartSlackbot(name string) error {
 
 				callbackID := message.UserID + "_" + message.TriggerID
 				dialog := slack.Dialog{
-					Title:       cmd,
-					SubmitLabel: "Run",
-					CallbackID:  callbackID,
-					Elements:    elems,
+					Title:          cmd,
+					SubmitLabel:    "Run",
+					CallbackID:     callbackID,
+					Elements:       elems,
+					NotifyOnCancel: true,
 				}
 
 				done := make(chan error, 1)
 
 				bot.RegisterInteractionCallbackHandler(callbackID, func(callback slack.InteractionCallback) (interface{}, error) {
+					if callback.Type == slack.InteractionTypeDialogCancellation {
+						done <- nil
+
+						return nil, nil
+					}
+
 					if callback.Type != slack.InteractionTypeDialogSubmission {
 						return nil, fmt.Errorf("unexpected type of interaction callback: want %s, got %s", slack.InteractionTypeDialogSubmission, callback.Type)
 					}

@@ -259,7 +259,10 @@ func (conn *Connection) Run() error {
 
 		userInput := cmd.Command + " " + cmdText
 
-		c := "run " + cmdText
+		// This should be a full Variant command without the executable name.
+		//
+		// E.g. for what you would type `variant run foo bar --opt1`, this shuold be `run foo bar --opt1`, as without the executable name.
+		variantCmdWithArgs := "run " + cmdText
 
 		response := slack.Message{}
 		// You should always specify response type even when you're intended to use the default "ephemeral"
@@ -278,7 +281,7 @@ func (conn *Connection) Run() error {
 			_, _, _, err := conn.Client.SendMessage(
 				cmd.ChannelID,
 				slack.MsgOptionResponseURL(cmd.ResponseURL, slack.ResponseTypeEphemeral),
-				slack.MsgOptionText(fmt.Sprintf("Running `%s`... I'll soon post a message visible to everyone in this channel to share the progress and the result of it.", c), false),
+				slack.MsgOptionText(fmt.Sprintf("Running `%s`... I'll soon post a message visible to everyone in this channel to share the progress and the result of it.", variantCmdWithArgs), false),
 			)
 			if err != nil {
 				fmt.Printf("async response 1 error: %v", err)
@@ -299,7 +302,7 @@ func (conn *Connection) Run() error {
 				return
 			}
 
-			res := conn.HandleSlashCommand(conn, c, cmd)
+			res := conn.HandleSlashCommand(conn, variantCmdWithArgs, cmd)
 
 			fmt.Printf("async slash command run finished: %s\n", res)
 
