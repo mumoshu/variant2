@@ -444,6 +444,83 @@ In addition to everything available via the [native HCL syntax](https://github.c
 
 `config "NAME" {}` is a layered configuration named `NAME`
 
+Let's assume `defaults.yaml` has the following content:
+
+```yaml
+api:
+  endpoint: api.example.com
+replicas: 2
+```
+
+And a Variant command that contains a job named `thing` that has a `config` block named `conf`:
+
+```hcl
+job "thing" {
+  option "env" {
+    type = string
+  }
+
+  config "myconf" {
+    source file {
+      path = "defaults.yaml"
+    }
+
+    source job {
+      name = "values"
+      args = {
+        env = opt.env
+      }
+    }
+
+    source job {
+      name = "value"
+      args = {
+        
+      }
+      key = "key1"
+      format = "text"
+    }
+  }
+
+  exec {
+    command = "echo"
+    args = list("apiendpoint=${conf.myconf.api.endpoint}, replicas=${conf.myconf.replicas}, env=${conf.myconf.env}, key1=${conf.myconf.key1}")
+  }
+}
+
+job "values" {
+  option "env" {
+    type = string
+  }
+
+  exec {
+    command = "echo"
+    args = list("env: ${opt.env}")
+  }
+}
+
+job "value" {
+  exec {
+    command = "echo"
+    args = list("val1")
+  }
+}
+```
+
+The first source loads a file at `defaults.yaml` and merges the keys and values in it into `conf`.
+
+Similarly, the second source loads keys and values from a job named `values` and merges them into `conf`.
+
+The third sets the value for the key `key1` where the value is the output of a job named `value`.
+
+The configuration `myconf` can be referenced by `${conf.myconf.KEY}` as shown in the `exec` block within the `thing` job above.
+
+Let's run `variant run thing --env prod` and the output should be:
+
+```console
+apiendpoint=api.example.com, replicas=2, env=prod, key1=val1
+```
+
 #### run
 
 `run` runs a job with args. `run` is available within `job` and `test`.

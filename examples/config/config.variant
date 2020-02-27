@@ -18,6 +18,18 @@ job "getfoo" {
   }
 }
 
+job "getbar" {
+  option "opt1" {
+    type = string
+  }
+  exec {
+    command = "echo"
+    args = [
+      "${opt.opt1}"
+    ]
+  }
+}
+
 job "config view" {
   // conf.foo
   config "foo" {
@@ -47,6 +59,17 @@ job "config view" {
         param1 = "PARAM1"
       }
       format = "yaml"
+    }
+
+    source job {
+      name = "getbar"
+      args = {
+        app = opt.app
+        env = opt.env
+        opt1 = "OPT1"
+      }
+      key = "bar"
+      format = "text"
     }
   }
 

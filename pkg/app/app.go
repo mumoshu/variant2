@@ -33,7 +33,13 @@ import (
 	"github.com/zclconf/go-cty/cty/gocty"
 )
 
-const NoRunMessage = "nothing to run"
+const (
+	NoRunMessage = "nothing to run"
+
+	FormatYAML = "yaml"
+
+	FormatText = "text"
+)
 
 type hcl2Loader struct {
 	Parser *hcl2parse.Parser
@@ -107,6 +113,7 @@ type Source struct {
 type SourceFile struct {
 	Path    string  `hcl:"path,attr"`
 	Default *string `hcl:"default,attr"`
+	Key     *string `hcl:"key,attr"`
 }
 
 type Step struct {
@@ -150,6 +157,7 @@ type SourceJob struct {
 	//Arguments map[string]hcl2.Expression `hcl:"args,attr"`
 	Args   hcl2.Expression `hcl:"args,attr"`
 	Format *string         `hcl:"format,attr"`
+	Key    *string         `hcl:"key,attr"`
 }
 
 type OptionSpec struct {
@@ -1293,7 +1301,7 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 
 			var format string
 
-			const FormatYAML = "yaml"
+			var key string
 
 			switch sourceSpec.Type {
 			case "file":
@@ -1314,6 +1322,10 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 				}
 
 				format = FormatYAML
+
+				if source.Key != nil {
+					key = *source.Key
+				}
 			case "job":
 				var source SourceJob
 				if err := gohcl2.DecodeBody(sourceSpec.Body, confCtx, &source); err != nil {
@@ -1349,6 +1361,10 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 				} else {
 					format = FormatYAML
 				}
+
+				if source.Key != nil {
+					key = *source.Key
+				}
 			default:
 				return cty.DynamicVal, fmt.Errorf("config source %q is not implemented. It must be either \"file\" or \"job\", so that it looks like `source file {` or `source file {`", sourceSpec.Type)
 			}
@@ -1360,6 +1376,25 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 				if err := yaml.Unmarshal(yamlData, &m); err != nil {
 					return cty.NilVal, err
 				}
+			case FormatText:
+				if key == "" {
+					return cty.NilVal, fmt.Errorf("`key` must be specified for `text`-formatted source at %d", sourceIdx)
+				}
+
+				keys := strings.Split(key, ".")
+				lastKeyIndex := len(keys) - 1
+				intermediateKeys := keys[0:lastKeyIndex]
+				lastKey := keys[lastKeyIndex]
+
+				cur := m
+
+				for _, k := range intermediateKeys {
+					if _, ok := cur[k]; !ok {
+						cur[k] = map[string]interface{}{}
+					}
+				}
+
+				cur[lastKey] = string(yamlData)
 			default:
 				return cty.NilVal, fmt.Errorf("format %q is not implemented yet. It must be \"yaml\" or omitted", format)
 			}
