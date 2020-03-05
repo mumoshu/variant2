@@ -650,6 +650,8 @@ github.com/k-kinzal/aliases v0.3.1 h1:oMJo0MWNYdKvy55xomYy+LGHbHuoLObwxvhrVGC778
 github.com/k-kinzal/aliases v0.3.1/go.mod h1:oGirm+fBXFqgRvUasjoyh5SEkVfVuYj70qcJX3eLfwU=
 github.com/k-kinzal/aliases v0.5.0 h1:7qQaH8gceUFPAj5dRp3UkW2CySYP5YcMdoUbgdYICFk=
 github.com/k-kinzal/aliases v0.5.0/go.mod h1:cQLBq3SmKKJ5vRBqprDgusJr9gphkpv6UDAOm/sEGu0=
+github.com/k-kinzal/aliases v0.5.1 h1:Tp36Vh7pxaMBNtBzHWmoiBtb+9XQLUW+XDjHQuoT6TQ=
+github.com/k-kinzal/aliases v0.5.1/go.mod h1:cQLBq3SmKKJ5vRBqprDgusJr9gphkpv6UDAOm/sEGu0=
 github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0/go.mod h1:1NbS8ALrpOvjt0rHPNLyCIeMtbizbir8U//inJ+zuB8=
 github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 h1:Z9n2FFNUXsshfwJMBgNA0RU6/i7WVaAegv3PtuIHPMs=
 github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51/go.mod h1:CzGEWj7cYgsdH8dAjBGEr58BoE7ScuLd+fwFZ44+/x8=
@@ -987,6 +989,8 @@ github.com/variantdev/mod v0.13.0 h1:O503lLN/lLwq/7cmGOWRmMdPedlDKUz1gVlmJj8PUhQ
 github.com/variantdev/mod v0.13.0/go.mod h1:tgD8X+bwoKvQ672cqL6rAsD2AuTZciZBfNz1bDbmOOw=
 github.com/variantdev/mod v0.14.0 h1:Zxf8XZEX7c7sHS8KXZIVGPdcp3cmUwUCRiQsdEncTvs=
 github.com/variantdev/mod v0.14.0/go.mod h1:0a93gzewZUjp+DaS3SsfqgXvglNPPi97yoLi5rw2T48=
+github.com/variantdev/mod v0.14.1 h1:U1l/UboLnnq/VOI/m5AqpI4pSQe2JWcot1AyPl5qziE=
+github.com/variantdev/mod v0.14.1/go.mod h1:dYLHWwYJ9lCK6uHijn8dPJOcs31uWsm7PgRzyuZJwlI=
 github.com/variantdev/vals v0.0.0-20191123083656-fc61ba6e8746 h1:uVcemWq1J1f3X49ZlrbQ/OkbqGvnpn6KuTfIvlP0hAY=
 github.com/variantdev/vals v0.0.0-20191123083656-fc61ba6e8746/go.mod h1:6Ma8+ZOzCxDY5cBSaoRQqE3E5IBaD9BYLfdUMmSsgHg=
 github.com/vmihailenco/msgpack v3.3.3+incompatible/go.mod h1:fy3FlTQTDXWkZ7Bh6AcGMlsjHatGryHQYUTf1ShIgkk=
