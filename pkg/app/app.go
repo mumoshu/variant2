@@ -3,8 +3,10 @@ package app
 import (
 	"flag"
 	"fmt"
+	"github.com/variantdev/mod/pkg/depresolver"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -329,7 +331,35 @@ func NewFromSources(srcs map[string][]byte) (*App, error) {
 	return newApp(app, cc, "", false)
 }
 
-func newConfigFromDir(dir string) (map[string]*hcl2.File, *HCL2Config, error) {
+func newConfigFromDir(dirPathOrURL string) (map[string]*hcl2.File, *HCL2Config, error) {
+	var dir string
+
+	s := strings.Split(dirPathOrURL, "::")
+
+	if len(s) > 1 {
+		forcePrefix := s[0]
+
+		u, err := url.Parse(s[1])
+		if err != nil {
+			return nil, nil, err
+		}
+		remote, err := depresolver.New(depresolver.Home(".variant2/cache"))
+		if err != nil {
+			return nil, nil, err
+		}
+
+		us := forcePrefix + "::" + u.String()
+
+		cacheDir, err := remote.ResolveDir(us)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		dir = cacheDir
+	} else {
+		dir = dirPathOrURL
+	}
+
 	files, err := conf.FindVariantFiles(dir)
 	if err != nil {
 		return map[string]*hcl2.File{}, nil, fmt.Errorf("failed to get %s files: %v", conf.VariantFileExt, err)
@@ -389,7 +419,14 @@ func newApp(app *App, cc *HCL2Config, importBaseDir string, enableImports bool) 
 				return nil, fmt.Errorf("[bug] Imports are disable in the embedded mode")
 			}
 
-			d := filepath.Join(importBaseDir, *j.Import)
+			var d string
+
+			if strings.Contains(*j.Import, ":") {
+				d = *j.Import
+			} else {
+				d = filepath.Join(importBaseDir, *j.Import)
+			}
+
 			a, err := New(d)
 
 			if err != nil {
