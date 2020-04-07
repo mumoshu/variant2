@@ -3,7 +3,6 @@ package app
 import (
 	"flag"
 	"fmt"
-	"github.com/variantdev/mod/pkg/depresolver"
 	"io"
 	"io/ioutil"
 	"net/url"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/variantdev/mod/pkg/depresolver"
 
 	"github.com/imdario/mergo"
 	"github.com/variantdev/mod/pkg/variantmod"
@@ -980,7 +981,7 @@ func (app *App) execRun(l *EventLogger, jobCtx *hcl2.EvalContext, run *RunJob, m
 func ctyToGo(v cty.Value) (interface{}, error) {
 	var vv interface{}
 
-	switch v.Type() {
+	switch tpe := v.Type(); tpe {
 	case cty.String:
 		var vvv string
 
@@ -1022,7 +1023,56 @@ func ctyToGo(v cty.Value) (interface{}, error) {
 
 		vv = vvv
 	default:
-		return nil, fmt.Errorf("handler for type %s not implemneted yet", v.Type().FriendlyName())
+		if tpe.IsTupleType() {
+			var elemTpe *cty.Type
+
+			elemTypes := tpe.TupleElementTypes()
+
+			for i := range elemTypes {
+				t := &elemTypes[i]
+
+				if elemTpe == nil {
+					elemTpe = t
+				} else if !elemTpe.Equals(*t) {
+					return nil, fmt.Errorf("handler for tuple with varying element types is not implemented yet: %v", v)
+				}
+			}
+
+			switch *elemTpe {
+			case cty.String:
+				var vvv []string
+
+				for i := range elemTypes {
+					var s string
+
+					if err := gocty.FromCtyValue(v.Index(cty.NumberIntVal(int64(i))), &s); err != nil {
+						return nil, err
+					}
+
+					vvv = append(vvv, s)
+				}
+
+				vv = vvv
+			case cty.Number:
+				var vvv []int
+
+				for i := range elemTypes {
+					var s int
+
+					if err := gocty.FromCtyValue(v.Index(cty.NumberIntVal(int64(i))), &s); err != nil {
+						return nil, err
+					}
+
+					vvv = append(vvv, s)
+				}
+
+				vv = vvv
+			default:
+				return nil, fmt.Errorf("handler for tuple with element type of %s is not implemented yet: %v", *elemTpe, v)
+			}
+		} else {
+			return nil, fmt.Errorf("handler for type %s not implemneted yet", v.Type().FriendlyName())
+		}
 	}
 
 	return vv, nil
