@@ -706,6 +706,8 @@ func (r *Runner) Run(arguments []string, opt ...RunOptions) error {
 		r.runCmd, err = r.Cobra()
 
 		if err != nil {
+			r.ap.PrintError(err)
+
 			return err
 		}
 	}
