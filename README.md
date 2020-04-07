@@ -604,6 +604,17 @@ Options:
 
 - `private`: when set to `true` by writing `private = true`, the job is hidden from the command-line help.
 
+#### Exec
+
+An `exec` block executes the OS command.
+
+Available attribuets:
+
+- `cmd`: The path to the executable binary/script
+- `args`: The arguments to be passed to the command
+- `env`: The environment variables given to the command
+- `dir`: The working directory
+
 # Learning materials
 
 `hcl`

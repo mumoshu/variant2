@@ -35,7 +35,14 @@ func (app *App) ExportBinary(srcDir, dstFile string) error {
 		return err
 	}
 
-	_, err = app.execCmd("sh", []string{"-c", fmt.Sprintf("cd %s; go mod init %s && go build -o %s %s", tmpDir, filepath.Base(srcDir), absDstFile, tmpDir)}, map[string]string{}, true)
+	_, err = app.execCmd(
+		Command{
+			Name: "sh",
+			Args: []string{"-c", fmt.Sprintf("cd %s; go mod init %s && go build -o %s %s", tmpDir, filepath.Base(srcDir), absDstFile, tmpDir)},
+			Env:  map[string]string{},
+		},
+		true,
+	)
 
 	return err
 }

@@ -32,7 +32,7 @@ require (
 	github.com/ulikunitz/xz v0.5.6 // indirect
 	github.com/urfave/cli v1.22.1 // indirect
 	github.com/variantdev/dag v0.0.0-20191028002400-bb0b3c785363
-	github.com/variantdev/mod v0.17.0
+	github.com/variantdev/mod v0.18.0
 	github.com/variantdev/vals v0.0.0-20191123083656-fc61ba6e8746
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect

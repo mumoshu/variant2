@@ -1000,6 +1000,8 @@ github.com/variantdev/mod v0.16.0 h1:To3yKfbEG+p9mQepMcpEGkuAafJkZmzKt/HxsJt4fz8
 github.com/variantdev/mod v0.16.0/go.mod h1:5UZ3felnbNUuTPul3SWYl4niPOh30gjDIqQCdJ+hT4A=
 github.com/variantdev/mod v0.17.0 h1:VML5qy3/PYrZaxGOkvS0sZYIOihwDcEqiD5JqxqpzAc=
 github.com/variantdev/mod v0.17.0/go.mod h1:5UZ3felnbNUuTPul3SWYl4niPOh30gjDIqQCdJ+hT4A=
+github.com/variantdev/mod v0.18.0 h1:zcbgPC/+i/vs+QZQ9KTU2Iab1P1RFDnBVgIdLUXDuaw=
+github.com/variantdev/mod v0.18.0/go.mod h1:5UZ3felnbNUuTPul3SWYl4niPOh30gjDIqQCdJ+hT4A=
 github.com/variantdev/vals v0.0.0-20191123083656-fc61ba6e8746 h1:uVcemWq1J1f3X49ZlrbQ/OkbqGvnpn6KuTfIvlP0hAY=
 github.com/variantdev/vals v0.0.0-20191123083656-fc61ba6e8746/go.mod h1:6Ma8+ZOzCxDY5cBSaoRQqE3E5IBaD9BYLfdUMmSsgHg=
 github.com/vmihailenco/msgpack v3.3.3+incompatible/go.mod h1:fy3FlTQTDXWkZ7Bh6AcGMlsjHatGryHQYUTf1ShIgkk=

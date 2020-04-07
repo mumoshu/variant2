@@ -132,6 +132,7 @@ type Exec struct {
 
 	Args hcl2.Expression `hcl:"args,attr"`
 	Env  hcl2.Expression `hcl:"env,attr"`
+	Dir  hcl2.Expression `hcl:"dir,attr"`
 }
 
 type RunJob struct {
@@ -629,14 +630,22 @@ func (app *App) PrintError(err error) {
 	}
 }
 
-func (app *App) execCmd(cmd string, args []string, env map[string]string, log bool) (*Result, error) {
+type Command struct {
+	Name string
+	Args []string
+	Env  map[string]string
+	Dir  string
+}
+
+func (app *App) execCmd(cmd Command, log bool) (*Result, error) {
 	shellCmd := &shell.Command{
-		Name: cmd,
-		Args: args,
-		//Stdout: os.Stdout,
-		//Stderr: os.Stderr,
-		//Stdin:  os.Stdin,
-		Env: env,
+		Name:   cmd.Name,
+		Args:   cmd.Args,
+		Stdout: nil,
+		Stderr: nil,
+		Stdin:  nil,
+		Env:    cmd.Env,
+		Dir:    cmd.Dir,
 	}
 
 	sh := shell.Shell{
@@ -668,7 +677,13 @@ func (app *App) execCmd(cmd string, args []string, env map[string]string, log bo
 	}
 
 	if err != nil {
-		return re, errors.Wrap(err, app.sanitize(fmt.Sprintf("command \"%s %s\"", cmd, strings.Join(args, " "))))
+		msg := app.sanitize(fmt.Sprintf("command \"%s %s\"", cmd.Name, strings.Join(cmd.Args, " ")))
+
+		if cmd.Dir != "" {
+			msg += fmt.Sprintf(" in %q", cmd.Dir)
+		}
+
+		return re, errors.Wrap(err, msg)
 	}
 
 	return re, nil
@@ -689,6 +704,8 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 
 	var env map[string]string
 
+	var dir string
+
 	if j.Exec != nil {
 		if diags := gohcl2.DecodeExpression(j.Exec.Command, ctx, &cmd); diags.HasErrors() {
 			return nil, diags
@@ -702,7 +719,13 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 			return nil, diags
 		}
 
-		res, err = app.execCmd(cmd, args, env, true)
+		if !IsExpressionEmpty(j.Exec.Dir) {
+			if diags := gohcl2.DecodeExpression(j.Exec.Dir, ctx, &dir); diags.HasErrors() {
+				return nil, diags
+			}
+		}
+
+		res, err = app.execCmd(Command{Name: cmd, Args: args, Env: env, Dir: dir}, true)
 		if err := l.LogExec(cmd, args); err != nil {
 			return nil, err
 		}
