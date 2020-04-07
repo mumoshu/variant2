@@ -598,6 +598,12 @@ That is, a job containing `assert` can be used as a custom assertion "function" 
 
 A job containing one or more `step`s can be used as a workflow composed of multiple jobs. Each `step` is restricted to call a single `job`. As each `job` is easily unit testable, this ensures that you can test the workflow without dealing with each job's implementation.
 
+Options:
+
+`job` has the following attributes:
+
+- `private`: when set to `true` by writing `private = true`, the job is hidden from the command-line help.
+
 # Learning materials
 
 `hcl`

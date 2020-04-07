@@ -204,6 +204,9 @@ type JobSpec struct {
 	Run    *RunJob         `hcl:"run,block"`
 	Import *string         `hcl:"import,attr"`
 
+	// Private hides the job from `variant run -h` when set to true
+	Private *bool `hcl:"private,attr"`
+
 	Log *LogSpec `hcl:"log,block"`
 
 	Steps []Step `hcl:"step,block"`

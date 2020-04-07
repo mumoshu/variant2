@@ -599,6 +599,11 @@ func (r *Runner) Cobra() (*cobra.Command, error) {
 			Short: strings.Split(desc, "\n")[0],
 			Long:  desc,
 		}
+
+		if job.Private != nil {
+			cli.Hidden = *job.Private
+		}
+
 		cfg, err := configureCommand(cli, job, r.Interactive)
 
 		if err != nil {
