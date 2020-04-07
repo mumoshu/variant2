@@ -594,6 +594,10 @@ func (r *Runner) Cobra() (*cobra.Command, error) {
 			desc = *job.Description
 		}
 
+		for _, p := range job.Parameters {
+			cmdName += fmt.Sprintf(" [%s]", strings.ToUpper(p.Name))
+		}
+
 		cli := &cobra.Command{
 			Use:   cmdName,
 			Short: strings.Split(desc, "\n")[0],
