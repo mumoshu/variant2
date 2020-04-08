@@ -122,7 +122,7 @@ type SourceFile struct {
 type Step struct {
 	Name string `hcl:"name,label"`
 
-	Run *RunJob `hcl:"run,block"`
+	Run RunJob `hcl:"run,block"`
 
 	Needs *[]string `hcl:"need,attr"`
 }
@@ -1129,7 +1129,7 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *hcl2.EvalContext, results m
 		s := steps[i]
 
 		f := func() (*Result, error) {
-			res, err := app.execRun(l, &hclCtx, s.Run, m)
+			res, err := app.execRun(l, &hclCtx, &s.Run, m)
 			if err != nil {
 				return res, err
 			}
