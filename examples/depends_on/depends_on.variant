@@ -1,0 +1,51 @@
+job "all" {
+  depends_on "install terraform" {
+    args = {
+      version = "0.12.13"
+    }
+  }
+
+  depends_on "terraform init" {
+    items = ["efs", "eks"]
+    args  = {
+      project = item
+    }
+  }
+
+  run "notify" {
+    message = "terraform init completed!"
+  }
+}
+
+job "install terraform" {
+   option "version" {
+     type = string
+   }
+
+   exec {
+      command = "bash"
+      args = ["-c", "echo Installing terraform v${opt.version}"]
+   }
+}
+
+job "terraform init" {
+  parameter "project" {
+    type = string
+  }
+
+  exec {
+    command = "bash"
+    args = ["-c", "echo Initializing ${param.project}"]
+  }
+}
+
+job "notify" {
+  parameter "message" {
+    type = string
+  }
+
+  exec {
+    command = "bash"
+    args = ["-c", "echo ${param.message}"]
+  }
+}

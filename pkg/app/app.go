@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/zclconf/go-cty/cty/function"
+
 	"github.com/variantdev/mod/pkg/depresolver"
 
 	"github.com/imdario/mergo"
@@ -135,6 +137,13 @@ type Exec struct {
 	Dir  hcl2.Expression `hcl:"dir,attr"`
 }
 
+type DependsOn struct {
+	Name string `hcl:"name,label"`
+
+	Items hcl2.Expression `hcl:"items,attr"`
+	Args  hcl2.Expression `hcl:"args,attr"`
+}
+
 type RunJob struct {
 	Name string `hcl:"name,label"`
 
@@ -199,6 +208,7 @@ type JobSpec struct {
 
 	SourceLocator hcl2.Expression `hcl:"__source_locator,attr"`
 
+	Deps   []DependsOn     `hcl:"depends_on,block"`
 	Exec   *Exec           `hcl:"exec,block"`
 	Assert []Assert        `hcl:"assert,block"`
 	Fail   hcl2.Expression `hcl:"fail,attr"`
@@ -707,6 +717,21 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 
 	var dir string
 
+	var depStdout string
+
+	if j.Deps != nil {
+		for i := range j.Deps {
+			d := j.Deps[i]
+
+			res, err = app.execMultiRun(l, ctx, &d)
+			if err != nil {
+				return nil, err
+			}
+
+			depStdout += res.Stdout
+		}
+	}
+
 	if j.Exec != nil {
 		if diags := gohcl2.DecodeExpression(j.Exec.Command, ctx, &cmd); diags.HasErrors() {
 			return nil, diags
@@ -747,6 +772,10 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 				return nil, err2
 			}
 		}
+	}
+
+	if depStdout != "" {
+		res.Stdout = depStdout + res.Stdout
 	}
 
 	return res, err
@@ -971,13 +1000,134 @@ func (app *App) execRunInternal(l *EventLogger, jobCtx *hcl2.EvalContext, run *R
 		args[k] = vv
 	}
 
+	return app.execRunArgs(l, run.Name, args)
+}
+
+func (app *App) execRunArgs(l *EventLogger, name string, args map[string]interface{}) (*Result, error) {
 	if l != nil {
-		if err := l.LogRun(run.Name, args); err != nil {
+		if err := l.LogRun(name, args); err != nil {
 			return nil, err
 		}
 	}
 
-	return app.run(l, run.Name, args, args)
+	return app.run(l, name, args, args)
+}
+
+func cloneEvalContext(c *hcl2.EvalContext) *hcl2.EvalContext {
+	var ctx hcl2.EvalContext
+
+	ctx.Variables = map[string]cty.Value{}
+
+	for k, v := range c.Variables {
+		ctx.Variables[k] = v
+	}
+
+	ctx.Functions = map[string]function.Function{}
+
+	for k, v := range c.Functions {
+		ctx.Functions[k] = v
+	}
+
+	return &ctx
+}
+
+func (app *App) execMultiRun(l *EventLogger, jobCtx *hcl2.EvalContext, r *DependsOn) (*Result, error) {
+	ctx := cloneEvalContext(jobCtx)
+
+	ctyItems := []cty.Value{}
+
+	items := []interface{}{}
+
+	if !IsExpressionEmpty(r.Items) {
+		if err := gohcl2.DecodeExpression(r.Items, jobCtx, &ctyItems); err != nil {
+			return nil, err
+		}
+
+		for _, item := range ctyItems {
+			v, err := ctyToGo(item)
+
+			if err != nil {
+				return nil, err
+			}
+
+			items = append(items, v)
+		}
+	}
+
+	if len(items) > 0 {
+		var stdout string
+
+		for _, item := range items {
+			iterCtx := cloneEvalContext(ctx)
+
+			v, err := goToCty(item)
+			if err != nil {
+				return nil, err
+			}
+
+			iterCtx.Variables["item"] = v
+
+			args := map[string]interface{}{}
+
+			ctyArgs := map[string]cty.Value{}
+
+			if err := gohcl2.DecodeExpression(r.Args, iterCtx, &ctyArgs); err != nil {
+				return nil, err
+			}
+
+			for k, v := range ctyArgs {
+				var err error
+
+				args[k], err = ctyToGo(v)
+
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			res, err := app.execRunArgs(l, r.Name, args)
+
+			if err != nil {
+				return res, err
+			}
+
+			stdout += res.Stdout + "\n"
+		}
+
+		return &Result{
+			Stdout:     stdout,
+			Stderr:     "",
+			Noop:       false,
+			ExitStatus: 0,
+		}, nil
+	}
+
+	args := map[string]interface{}{}
+
+	ctyArgs := map[string]cty.Value{}
+
+	if err := gohcl2.DecodeExpression(r.Args, ctx, &ctyArgs); err != nil {
+		return nil, err
+	}
+
+	for k, v := range ctyArgs {
+		var err error
+
+		args[k], err = ctyToGo(v)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	res, err := app.execRunArgs(l, r.Name, args)
+	if err != nil {
+		return res, err
+	}
+
+	res.Stdout += "\n"
+
+	return res, nil
 }
 
 func (app *App) execRun(l *EventLogger, jobCtx *hcl2.EvalContext, run *RunJob, m sync.Locker) (*Result, error) {
