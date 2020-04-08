@@ -348,6 +348,7 @@ func newConfigFromDir(dirPathOrURL string) (map[string]*hcl2.File, *HCL2Config, 
 		if err != nil {
 			return nil, nil, err
 		}
+
 		remote, err := depresolver.New(depresolver.Home(".variant2/cache"))
 		if err != nil {
 			return nil, nil, err
