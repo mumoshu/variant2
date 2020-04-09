@@ -151,7 +151,8 @@ func (l *EventLogger) append(evt Event) error {
 			return err
 		}
 
-		if l.Stream == "stderr" {
+		// Non-nil line means that any collect block's condition matched the logged event
+		if line != nil && l.Stream == "stderr" {
 			if _, err := l.Stderr.Write([]byte(*line + "\n")); err != nil {
 				return err
 			}

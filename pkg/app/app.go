@@ -529,7 +529,11 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			l.Stderr = app.Stderr
 		}
 
-		if j.Log != nil && j.Log.Collects != nil && j.Log.Forwards != nil && len(j.Log.Forwards) > 0 {
+		if j.Log != nil {
+			if len(j.Log.Collects) == 0 {
+				return nil, fmt.Errorf("log config for job %q is invalid: at least one collect block is required")
+			}
+
 			var file string
 
 			if nonEmptyExpression(j.Log.File) {
