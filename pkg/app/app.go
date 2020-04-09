@@ -545,6 +545,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 
 			if nonEmptyExpression(j.Log.File) {
 				if diags := gohcl2.DecodeExpression(j.Log.File, jobCtx, &file); diags.HasErrors() {
+					app.PrintDiags(diags)
 					return nil, diags
 				}
 			}
@@ -563,6 +564,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 
 				if nonEmptyExpression(j.Log.Stream) {
 					if diags := gohcl2.DecodeExpression(j.Log.Stream, jobCtx, &stream); diags.HasErrors() {
+						app.PrintDiags(diags)
 						return nil, diags
 					}
 				}
@@ -601,6 +603,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 
 		if !IsExpressionEmpty(j.Concurrency) {
 			if err := gohcl2.DecodeExpression(j.Concurrency, jobCtx, &concurrency); err != nil {
+				app.PrintDiags(err)
 				return nil, err
 			}
 
@@ -614,6 +617,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 		{
 			res, err := app.execJobSteps(l, jobCtx, needs, j.Steps, concurrency)
 			if res != nil || err != nil {
+				app.PrintDiags(err)
 				return res, err
 			}
 		}
@@ -623,6 +627,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			if r == nil && err == nil {
 				return nil, fmt.Errorf(NoRunMessage)
 			}
+			app.PrintDiags(err)
 			return r, err
 		}
 	}, nil
@@ -635,7 +640,7 @@ func (app *App) WriteDiags(diagnostics hcl2.Diagnostics) {
 		100,       // wrapping width
 		true,      // generate colored/highlighted output
 	)
-	if err := wr.WriteDiagnostics(diagnostics); err != nil {
+	if err := wr.WriteDiagnostic(diagnostics[0]); err != nil {
 		panic(err)
 	}
 }
@@ -651,6 +656,13 @@ func (app *App) PrintError(err error) {
 		app.WriteDiags(diags)
 	default:
 		fmt.Fprintf(os.Stderr, "%v", err)
+	}
+}
+
+func (app *App) PrintDiags(err error) {
+	switch diags := err.(type) {
+	case hcl2.Diagnostics:
+		app.WriteDiags(diags)
 	}
 }
 
