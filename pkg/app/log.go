@@ -46,9 +46,18 @@ func (evt Event) toCty() cty.Value {
 }
 
 func (e *RunEvent) toCty() cty.Value {
-	args, err := goToCty(e.Args)
-	if err != nil {
-		panic(err)
+	var args cty.Value
+
+	if len(e.Args) > 0 {
+		var err error
+
+		args, err = goToCty(e.Args)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		// We can't call goToCty for empty map because it results in go-cty panic with "must not call MapVal with empty map"
+		args = cty.MapValEmpty(cty.DynamicPseudoType)
 	}
 
 	return cty.ObjectVal(map[string]cty.Value{
