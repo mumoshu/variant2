@@ -1757,7 +1757,9 @@ func getVarialbles(varCtx *hcl2.EvalContext, varSpecs []Variable) (cty.Value, er
 	for _, varSpec := range varSpecs {
 		var tpe cty.Type
 
-		if tv, _ := varSpec.Type.Value(nil); !tv.IsNull() {
+		tv, _ := varSpec.Type.Value(nil)
+
+		if !tv.IsNull() {
 			var diags hcl2.Diagnostics
 
 			tpe, diags = typeexpr.TypeConstraint(varSpec.Type)
@@ -1793,7 +1795,7 @@ func getVarialbles(varCtx *hcl2.EvalContext, varSpecs []Variable) (cty.Value, er
 
 			vty := v.Type()
 
-			if !vty.Equals(tpe) {
+			if !tv.IsNull() && !vty.Equals(tpe) {
 				return cty.ObjectVal(varFields), fmt.Errorf("unexpected type of value for variable. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
 			}
 
