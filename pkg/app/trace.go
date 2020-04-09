@@ -12,7 +12,9 @@ func (app *App) newTracingLogCollector() LogCollector {
 				return nil, false, err
 			}
 
-			app.Stderr.Write(append([]byte("TRACE\t"), bs...))
+			if _, err := app.Stderr.Write(append([]byte("TRACE\t"), bs...)); err != nil {
+				panic(err)
+			}
 
 			return nil, false, nil
 		},
