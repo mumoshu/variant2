@@ -135,6 +135,8 @@ type Exec struct {
 	Args hcl2.Expression `hcl:"args,attr"`
 	Env  hcl2.Expression `hcl:"env,attr"`
 	Dir  hcl2.Expression `hcl:"dir,attr"`
+
+	Interactive *bool `hcl:"interactive,attr"`
 }
 
 type DependsOn struct {
@@ -646,39 +648,56 @@ type Command struct {
 	Args []string
 	Env  map[string]string
 	Dir  string
+
+	Interactive bool
 }
 
 func (app *App) execCmd(cmd Command, log bool) (*Result, error) {
 	shellCmd := &shell.Command{
-		Name:   cmd.Name,
-		Args:   cmd.Args,
-		Stdout: nil,
-		Stderr: nil,
-		Stdin:  nil,
-		Env:    cmd.Env,
-		Dir:    cmd.Dir,
+		Name: cmd.Name,
+		Args: cmd.Args,
+		Env:  cmd.Env,
+		Dir:  cmd.Dir,
 	}
 
 	sh := shell.Shell{
 		Exec: shell.DefaultExec,
 	}
 
-	var opts shell.CaptureOpts
+	var err error
 
-	if log {
-		opts.LogStdout = func(line string) {
-			fmt.Fprintf(app.Stdout, "%s\n", line)
+	var re *Result
+
+	if cmd.Interactive {
+		shellCmd.Stdin = os.Stdin
+		shellCmd.Stdout = os.Stdout
+		shellCmd.Stderr = os.Stderr
+
+		res := sh.Wait(shellCmd)
+
+		err = res.Error
+
+		re = &Result{}
+	} else {
+		var opts shell.CaptureOpts
+
+		if log {
+			opts.LogStdout = func(line string) {
+				fmt.Fprintf(app.Stdout, "%s\n", line)
+			}
+			opts.LogStderr = func(line string) {
+				fmt.Fprintf(app.Stderr, "%s\n", line)
+			}
 		}
-		opts.LogStderr = func(line string) {
-			fmt.Fprintf(app.Stderr, "%s\n", line)
+
+		var res *shell.CaptureResult
+
+		res, err = sh.Capture(shellCmd, opts)
+
+		re = &Result{
+			Stdout: res.Stdout,
+			Stderr: res.Stderr,
 		}
-	}
-
-	res, err := sh.Capture(shellCmd, opts)
-
-	re := &Result{
-		Stdout: res.Stdout,
-		Stderr: res.Stderr,
 	}
 
 	//nolint
@@ -751,7 +770,18 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 			}
 		}
 
-		res, err = app.execCmd(Command{Name: cmd, Args: args, Env: env, Dir: dir}, true)
+		c := Command{
+			Name: cmd,
+			Args: args,
+			Env:  env,
+			Dir:  dir,
+		}
+
+		if j.Exec.Interactive != nil && *j.Exec.Interactive {
+			c.Interactive = true
+		}
+
+		res, err = app.execCmd(c, true)
 		if err := l.LogExec(cmd, args); err != nil {
 			return nil, err
 		}
