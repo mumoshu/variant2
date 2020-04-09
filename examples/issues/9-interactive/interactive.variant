@@ -1,0 +1,10 @@
+#!/usr/bin/env variant
+
+job "example" {
+  description = "interactive test"
+  exec {
+    command = "rm"
+    args = [ "-i", "/tmp/test" ]
+    interactive = true
+   }
+}

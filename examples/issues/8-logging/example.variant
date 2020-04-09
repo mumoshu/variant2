@@ -1,0 +1,24 @@
+#!/usr/bin/env variant
+
+
+job "example" {
+  description = "Write varfile to terraform moduledir"
+  exec {
+      command = "echo"
+      args = [
+        "foobar"
+      ]
+  }
+
+  log {
+    collect {
+      condition = event.type == "exec"
+      format = "exec=${jsonencode(event.exec)}"
+    }
+
+    # When `stream = "stderr" is set, every log event that matched any collect condition is written to stderr as well
+    stream = "stderr"
+
+    file = "log.txt"
+  }
+}

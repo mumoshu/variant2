@@ -145,6 +145,9 @@ Still curious how Variant helps developing your own command as it grows?
 
 Head over to the following per-topic sections for more features:
 
+- [Writing Commands](#writing-commands) to learn the Variant DSL for writing commands
+- [Debugging Commands](#debugging-commands) to learn how to debug your Variant command
+- [Writing Tests](#writing-tests) to learn the Variant DSL for writing tests
 - [Generating Shims](#generating-shims) to make your Variant command look native
 - [Concurrency](#concurrency) section to make `kubectl` and `helm` concurrent so that the installation time becomes minimal
 - [Log Collection](#log-collection) to filter and forward log of commands and the arguments passed to them along with their outputs
@@ -412,13 +415,7 @@ and runs it.
 
 One of cool features of the bot is that when you missed to specify values for certain options, it will automatically start a interactive session to let you select and input missing values within Slack. You don't need to remember all the flags nor repeat lengthy commands anymore.
 
-## JSON Configuration Syntax
-
-`Variant` has a JSON-based dialect of its DSL. It's based on the HCL's build-in feature to natively support JSON, so the conversion rules between HCL and JSON is very similar to famous HCL-based language like [Terraform](https://www.terraform.io/docs/configuration/syntax-json.html).
-
-Generally speaking, you can use blocks, attributes and expressions with a little overhead. See the [options-json](/examples/options-json) example for more details.
-
-## Configuration Language
+## Writing Commands
 
 Variant uses its own configuration language based on [the HashiCorp configuration language 2](https://github.com/hashicorp/hcl).
 
@@ -551,12 +548,6 @@ job "another job" {
 
 #### exec
 
-#### test
-
-`test "CMD1 SUBCMD1 {}` is unit test for `job "CMD1 SUBCMD1"`
-
-#### assert
-
 **Functions**:
 
 - All the [Terraform built-in functions](https://www.terraform.io/docs/configuration/functions.html)
@@ -615,7 +606,84 @@ Available attribuets:
 - `env`: The environment variables given to the command
 - `dir`: The working directory
 
+### JSON Configuration Syntax
+
+`Variant` has a JSON-based dialect of its DSL. It's based on the HCL's build-in feature to natively support JSON, so the conversion rules between HCL and JSON is very similar to famous HCL-based language like [Terraform](https://www.terraform.io/docs/configuration/syntax-json.html).
+
+Generally speaking, you can use blocks, attributes and expressions with a little overhead. See the [options-json](/examples/options-json) example for more details.
+
+## Debugging Commands
+
+Setting the environment variable `VARIANT_TRACE` to a non-empty value enables the trace logging.
+
+It might be handy when you are curious how a third-party Variant command works, or when it seems like your command has an unknown bug that must be fixed.
+
+Example:
+
+```console
+$ VARIANT_TRACE=1 VARIANT_DIR=examples/issues/8-logging ./variant run example
+go build -o variant ./pkg/cmd
+foobar
+TRACE   {"Type":"exec","Time":"2020-04-09T16:01:37.436145+09:00","Run":null,"Exec":{"Command":"echo","Args":["foobar"]}}exec={"args":["foobar"],"command":"echo"}
+```
+
+## Writing Tests
+
+`Variant` has its own testing framework composed of the test runner and the config syntax.
+
+The test runner can be triggered by executing `variant test`. Upon run, the runner searches for test files whose names suffixed with `_test.variant` , parses it and run all the tests defined within it.
+ 
+The test configuration syntax is as simple as declaring `test "CMD1 SUBCMD1 {}`, which is a set of unit tests for `job "CMD1 SUBCMD1"`.
+
+In each `test`, you can use `case`, `run` and `assert` blocks to define tests.
+
+`case "case1" { varname = value }` defines a test case named `case1` with the test data consists of a single variable called `varname` whose value is `value`. You can include one or more variables in a `case`.
+
+`run "jobname" { arg1 = value }` specifies which `job` is run and which args is passed to the job run. This syntax is equivalent to `run` under `job`s and `step`s.
+
+Each `assert { condition = expression }` block adds a assertion that is run by the test framework. When the expression contained in the `condition` evaluated to `false`, the test fails.
+
+Example:
+   
+```hcl
+test "options" {
+  case "ok1" {
+    exitstatus = 0
+    err = ""
+    out = trimspace(<<EOS
+1 2 3 a b|c
+EOS
+    )
+  }
+
+  run "test" {
+    int1 = 1
+    ints1 = list(2,3)
+    str1 = "a"
+    strs1 = list("b","c")
+  }
+
+  assert "error" {
+    condition = run.err == case.err
+  }
+
+  assert "out" {
+    condition = (run.res.set && run.res.stdout == case.out) || !run.res.set
+  }
+
+  assert "exitstatus" {
+    condition = run.res.exitstatus == case.exitstatus
+  }
+}
+```
+
+For more examples, please browse `examples` directories and look for any files ending with `_test.variant`.
+
 # Learning materials
+
+The `Variant` DSL is very much based on HCL and CTY.
+
+The following is a set of recommended reading for learning HCL and CTY.
 
 `hcl`
 
