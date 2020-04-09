@@ -538,7 +538,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 
 		if j.Log != nil {
 			if len(j.Log.Collects) == 0 {
-				return nil, fmt.Errorf("log config for job %q is invalid: at least one collect block is required")
+				return nil, fmt.Errorf("log config for job %q is invalid: at least one collect block is required", j.Name)
 			}
 
 			var file string
