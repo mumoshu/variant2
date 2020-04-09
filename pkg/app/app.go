@@ -302,6 +302,8 @@ type App struct {
 	JobByName map[string]JobSpec
 
 	Stdout, Stderr io.Writer
+
+	Trace string
 }
 
 func New(dir string) (*App, error) {
@@ -309,6 +311,7 @@ func New(dir string) (*App, error) {
 
 	app := &App{
 		Files: nameToFiles,
+		Trace: os.Getenv("VARIANT_TRACE"),
 	}
 
 	if err != nil {
@@ -527,6 +530,10 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 		if l == nil {
 			l = NewEventLogger(cmd, args, opts)
 			l.Stderr = app.Stderr
+
+			if app.Trace != "" {
+				l.Register(app.newTracingLogCollector())
+			}
 		}
 
 		if j.Log != nil {
