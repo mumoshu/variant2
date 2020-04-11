@@ -599,7 +599,7 @@ Options:
 
 An `exec` block executes the OS command.
 
-Available attribuets:
+Available attributes:
 
 - `cmd`: The path to the executable binary/script
 - `args`: The arguments to be passed to the command
