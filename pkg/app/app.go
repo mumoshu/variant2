@@ -1301,7 +1301,7 @@ func ctyToGo(v cty.Value) (interface{}, error) {
 				return nil, fmt.Errorf("handler for tuple with element type of %s is not implemented yet: %v", *elemTpe, v)
 			}
 		} else {
-			return nil, fmt.Errorf("handler for type %s not implemneted yet", v.Type().FriendlyName())
+			return nil, fmt.Errorf("handler for type %s not implemented yet", v.Type().FriendlyName())
 		}
 	}
 
