@@ -1,0 +1,60 @@
+option "somemap_deprecated" {
+  type = map(string)
+  default = map("foo", "FOO", "bar", "BAR")
+}
+
+option "somemap" {
+  type = map(string)
+  default = {foo="FOO", bar="BAR"}
+}
+
+option "emptymap" {
+  type = map(string)
+  # map() is invalid.
+  # it results in this error: `Error in function call; Call to function "map" failed: map requires an even number of two or more arguments, got 0.`
+  #default = map()
+  default = {}
+}
+
+option "sometuple" {
+  type = tuple([string,number])
+  default = ["x", 1]
+}
+
+option "someobj" {
+  type = object({foo=string, bar=number})
+  default = {foo="FOO", bar=1}
+}
+
+job "example" {
+  exec {
+    command = "bash"
+    args = [
+     "-c", <<EOS
+cat <<EOF
+somemap_deprecated.foo=${opt.somemap_deprecated.foo}
+somemap_deprecated.bar=${opt.somemap_deprecated.bar}
+somemap_deprecated["foo"]=${opt.somemap_deprecated["foo"]}
+somemap_deprecated["bar"]=${opt.somemap_deprecated["bar"]}
+
+somemap.foo=${opt.somemap.foo}
+somemap.bar=${opt.somemap.bar}
+somemap["foo"]=${opt.somemap["foo"]}
+somemap["bar"]=${opt.somemap["bar"]}
+
+emptymap.foo=${try(opt.emptymap.foo, "FOO")}
+
+sometuple.0=${opt.sometuple.0}
+sometuple.1=${opt.sometuple.1}
+sometuple[0]=${opt.sometuple[0]}
+sometuple[1]=${opt.sometuple[1]}
+
+someobj.foo=${opt.someobj.foo}
+someobj.bar=${opt.someobj.bar}
+someobj["foo"]=${opt.someobj["foo"]}
+someobj["bar"]=${opt.someobj["bar"]}
+EOF
+EOS
+    ]
+  }
+}

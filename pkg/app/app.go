@@ -1474,8 +1474,30 @@ func getDefault(ctx cty.Value, def hcl2.Expression, tpe cty.Type) (*cty.Value, e
 			return nil, nil
 		}
 
-		if vv.Type() != tpe {
-			return nil, errors.WithStack(fmt.Errorf("unexpected type of value %v provided: want %s, got %s", vv, tpe.FriendlyName(), vv.Type().FriendlyName()))
+		if !vv.Type().Equals(tpe) {
+			// Supported automatic type conversions
+			if tpe.Equals(cty.Map(cty.String)) && vv.Type().IsObjectType() {
+				m := map[string]interface{}{}
+
+				for k, v := range vv.AsValueMap() {
+					switch v.Type() {
+					case cty.String:
+						m[k] = v.AsString()
+					default:
+						return nil, fmt.Errorf("unexpected type of value encountered while reading object. for %q, got %v(%s), wanted %s", k, v.GoString(), v.Type().FriendlyName(), "string")
+					}
+				}
+
+				var err error
+
+				vv, err = goToCty(m)
+
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				return nil, errors.WithStack(fmt.Errorf("unexpected type of value %v provided: want %s, got %s", vv, tpe.FriendlyName(), vv.Type().FriendlyName()))
+			}
 		}
 
 		return &vv, nil

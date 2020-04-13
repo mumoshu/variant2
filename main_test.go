@@ -62,6 +62,11 @@ func TestExamples(t *testing.T) {
 			variantDir: "./examples/module",
 		},
 		{
+			subject:    "defaults_test",
+			args:       []string{"variant", "test"},
+			variantDir: "./examples/defaults",
+		},
+		{
 			subject:    "module_test",
 			args:       []string{"variant", "test"},
 			variantDir: "./examples/module",

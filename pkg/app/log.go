@@ -80,6 +80,11 @@ func goToCty(goV interface{}) (cty.Value, error) {
 			}
 		}
 
+		// cty.MapVal doesn't support empty maps. It panics when encountered an empty map, so...
+		if len(m) == 0 {
+			return cty.MapValEmpty(cty.DynamicPseudoType), nil
+		}
+
 		return cty.MapVal(m), nil
 	case string:
 		return cty.StringVal(typed), nil
