@@ -1,0 +1,56 @@
+// test for `job "app deploy"`
+test "options" {
+  case "ok1" {
+    exitstatus = 0
+    args = []
+    err = ""
+    out = trimspace(<<EOS
+EOS
+    )
+  }
+
+  case "ok2" {
+    exitstatus = 0
+    args = ["a", "b"]
+    err = ""
+    out = trimspace(<<EOS
+a b
+EOS
+    )
+  }
+
+  case "ok3" {
+    exitstatus = 0
+    args = coalesce(list(""))
+    err = ""
+    out = trimspace(<<EOS
+EOS
+    )
+  }
+
+  case "ok4" {
+    exitstatus = 0
+    args = list("c", "d")
+    err = ""
+    out = trimspace(<<EOS
+c d
+EOS
+    )
+  }
+
+  run "example" {
+    args = case.args
+  }
+
+  assert "error" {
+    condition = run.err == case.err
+  }
+
+  assert "out" {
+    condition = (run.res.set && run.res.stdout == case.out) || !run.res.set
+  }
+
+  assert "exitstatus" {
+    condition = run.res.exitstatus == case.exitstatus
+  }
+}

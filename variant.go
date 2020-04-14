@@ -132,11 +132,11 @@ func valueOnChange(cli *cobra.Command, name string, v interface{}) func() interf
 	}
 }
 
-func configureCommand(cli *cobra.Command, root app.JobSpec, interactive bool) (*Config, error) {
+func createCobraFlagsFromVariantOptions(cli *cobra.Command, opts []app.OptionSpec, interactive bool) (map[string]func() interface{}, error) {
 	lazyOptionValues := map[string]func() interface{}{}
 
-	for i := range root.Options {
-		o := root.Options[i]
+	for i := range opts {
+		o := opts[i]
 
 		var tpe cty.Type
 
@@ -211,11 +211,31 @@ func configureCommand(cli *cobra.Command, root app.JobSpec, interactive bool) (*
 		}
 	}
 
+	return lazyOptionValues, nil
+}
+
+func configureCommand(cli *cobra.Command, root app.JobSpec, interactive bool) (*Config, error) {
+	lazyOptionValues, err := createCobraFlagsFromVariantOptions(cli, root.Options, interactive)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := func() map[string]func() interface{} {
+		m := map[string]func() interface{}{}
+		for name, f := range lazyOptionValues {
+			m[name] = f
+		}
+
+		return m
+	}
+
 	var minArgs int
 
 	var maxArgs int
 
 	lazyParamValues := map[string]func(args []string) (interface{}, error){}
+
+	var hasVarArgs bool
 
 	for i := range root.Parameters {
 		maxArgs++
@@ -228,32 +248,57 @@ func configureCommand(cli *cobra.Command, root app.JobSpec, interactive bool) (*
 		}
 
 		ii := i
+
+		ty, err := typeexpr.TypeConstraint(p.Type)
+
+		if err != nil {
+			return nil, err
+		}
+
+		var f func([]string, int) (interface{}, error)
+
+		switch ty {
+		case cty.Bool:
+			f = func(args []string, i int) (interface{}, error) {
+				return strconv.ParseBool(args[i])
+			}
+		case cty.String:
+			f = func(args []string, i int) (interface{}, error) {
+				return args[i], nil
+			}
+		case cty.Number:
+			f = func(args []string, i int) (interface{}, error) {
+				return strconv.Atoi(args[i])
+			}
+		case cty.List(cty.String):
+			if i != len(root.Parameters)-1 {
+				return nil, fmt.Errorf("list(string) parameter %q must be positioned at last", p.Name)
+			}
+
+			f = func(args []string, i int) (interface{}, error) {
+				return args[i:], nil
+			}
+
+			hasVarArgs = true
+		default:
+			return nil, fmt.Errorf("invalid parameter %q: type %s is not supported", p.Name, ty.FriendlyName())
+		}
+
 		lazyParamValues[p.Name] = func(args []string) (interface{}, error) {
 			if len(args) <= ii {
 				return nil, nil
 			}
 
-			v := args[ii]
-			ty, err := typeexpr.TypeConstraint(p.Type)
-
-			if err != nil {
-				return nil, err
-			}
-
-			switch ty {
-			case cty.Bool:
-				return strconv.ParseBool(v)
-			case cty.String:
-				return v, nil
-			case cty.Number:
-				return strconv.Atoi(v)
-			}
-
-			return nil, fmt.Errorf("unexpected type of arg at %d: value=%v, type=%T", ii, v, v)
+			return f(args, ii)
 		}
 	}
 
-	cli.Args = cobra.RangeArgs(minArgs, maxArgs)
+	if hasVarArgs {
+		cli.Args = cobra.MinimumNArgs(minArgs)
+	} else {
+		cli.Args = cobra.RangeArgs(minArgs, maxArgs)
+	}
+
 	params := func(args []string) (map[string]interface{}, error) {
 		m := map[string]interface{}{}
 
@@ -267,14 +312,6 @@ func configureCommand(cli *cobra.Command, root app.JobSpec, interactive bool) (*
 		}
 
 		return m, nil
-	}
-	opts := func() map[string]func() interface{} {
-		m := map[string]func() interface{}{}
-		for name, f := range lazyOptionValues {
-			m[name] = f
-		}
-
-		return m
 	}
 
 	return &Config{Parameters: params, Options: opts}, nil

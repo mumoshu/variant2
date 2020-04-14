@@ -1,0 +1,11 @@
+job "example" {
+  parameter "args" {
+    type = list(string)
+    default = []
+  }
+
+  exec {
+    command = "echo"
+    args = param.args
+  }
+}

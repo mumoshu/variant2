@@ -156,6 +156,16 @@ func TestExamples(t *testing.T) {
 			args:    []string{"variant", "./test/shebang/myapp/myapp", "test", "--int1", "1", "--ints1", "1,2", "--str1", "a", "--strs1", "b,c"},
 			wd:      "./test",
 		},
+		{
+			subject: "examples/issues/sweetops-CFFQ9GFB5-p1586798062189700",
+			args:    []string{"variant", "run", "example", "echo foo", "echo bar", "-p", "myproj", "-t", "mytenant"},
+			wd:      "./examples/issues/sweetops-CFFQ9GFB5-p1586798062189700",
+		},
+		{
+			subject: "examples/exec",
+			args:    []string{"variant", "test"},
+			wd:      "./examples/exec",
+		},
 	}
 
 	for i := range testcases {

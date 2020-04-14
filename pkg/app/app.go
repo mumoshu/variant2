@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/kr/text"
+
 	"github.com/zclconf/go-cty/cty/function"
 
 	"github.com/variantdev/mod/pkg/depresolver"
@@ -736,6 +738,14 @@ func (app *App) execCmd(cmd Command, log bool) (*Result, error) {
 			msg += fmt.Sprintf(" in %q", cmd.Dir)
 		}
 
+		if !log {
+			msg += fmt.Sprintf(`
+COMBINED OUTPUT:
+%s`,
+				text.Indent(re.Stdout+re.Stderr, "  "),
+			)
+		}
+
 		return re, errors.Wrap(err, msg)
 	}
 
@@ -1268,38 +1278,56 @@ func ctyToGo(v cty.Value) (interface{}, error) {
 				}
 			}
 
-			switch *elemTpe {
-			case cty.String:
-				var vvv []string
+			if elemTpe == nil {
+				vv = []interface{}{}
+			} else {
+				switch *elemTpe {
+				case cty.String:
+					var vvv []string
 
-				for i := range elemTypes {
-					var s string
+					for i := range elemTypes {
+						var s string
 
-					if err := gocty.FromCtyValue(v.Index(cty.NumberIntVal(int64(i))), &s); err != nil {
-						return nil, err
+						if err := gocty.FromCtyValue(v.Index(cty.NumberIntVal(int64(i))), &s); err != nil {
+							return nil, err
+						}
+
+						vvv = append(vvv, s)
 					}
 
-					vvv = append(vvv, s)
-				}
+					vv = vvv
+				case cty.Number:
+					var vvv []int
 
-				vv = vvv
-			case cty.Number:
-				var vvv []int
+					for i := range elemTypes {
+						var s int
 
-				for i := range elemTypes {
-					var s int
+						if err := gocty.FromCtyValue(v.Index(cty.NumberIntVal(int64(i))), &s); err != nil {
+							return nil, err
+						}
 
-					if err := gocty.FromCtyValue(v.Index(cty.NumberIntVal(int64(i))), &s); err != nil {
-						return nil, err
+						vvv = append(vvv, s)
 					}
 
-					vvv = append(vvv, s)
+					vv = vvv
+				default:
+					return nil, fmt.Errorf("handler for tuple with element type of %s is not implemented yet: %v", *elemTpe, v)
 				}
-
-				vv = vvv
-			default:
-				return nil, fmt.Errorf("handler for tuple with element type of %s is not implemented yet: %v", *elemTpe, v)
 			}
+		} else if tpe.IsObjectType() {
+			m := map[string]interface{}{}
+
+			for name := range tpe.AttributeTypes() {
+				attr := v.GetAttr(name)
+
+				v, err := ctyToGo(attr)
+				if err != nil {
+					return nil, fmt.Errorf("unable to decoode attribute %q of object: %w", name, err)
+				}
+				m[name] = v
+			}
+
+			vv = m
 		} else {
 			return nil, fmt.Errorf("handler for type %s not implemented yet", v.Type().FriendlyName())
 		}
@@ -1524,11 +1552,21 @@ func getValueFor(ctx cty.Value, name string, typeExpr hcl2.Expression, defaultEx
 		return vv, &tpe, nil
 	}
 
-	if vty, err := gocty.ImpliedType(v); err != nil {
-		return nil, nil, err
-	} else if vty != tpe {
-		return nil, nil, fmt.Errorf("unexpected type. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
-	}
+	//a, err := goToCty(v)
+	//
+	//if err != nil {
+	//	return nil, nil, err
+	//}
+	//
+	//if !a.Type().Equals(tpe) {
+	//	return nil, nil, fmt.Errorf("unexpected type. want %q, got %q", tpe.FriendlyNameForConstraint(), a.Type().FriendlyName())
+	//}
+
+	//if vty, err := gocty.ImpliedType(v); err != nil {
+	//	return nil, nil, err
+	//} else if vty != tpe {
+	//	return nil, nil, fmt.Errorf("unexpected type. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
+	//}
 
 	val, err := gocty.ToCtyValue(v, tpe)
 	if err != nil {

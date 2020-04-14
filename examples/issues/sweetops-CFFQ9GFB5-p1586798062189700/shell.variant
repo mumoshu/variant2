@@ -1,0 +1,55 @@
+# Source: https://sweetops.slack.com/archives/CFFQ9GFB5/p1586798062189700
+
+job "shell" {
+  description = "Run a command in a shell"
+  private = true
+  option "dir" {
+    default = ""
+    description = "Directory to run the command"
+    type = string
+  }
+  option "env" {
+    default = {}
+    description = "Directory to run the command"
+    type = map(string)
+  }
+  parameter "commands" {
+    description = "List of commands to execute"
+    type = list(string)
+  }
+  exec {
+    dir = opt.dir
+    env = opt.env
+    command = "bash"
+    args = ["-c", join("\n", param.commands)]
+  }
+}
+
+job "example" {
+  option "project" {
+    short = "p"
+    type = string
+  }
+
+  option "tenant" {
+    short = "t"
+    type = string
+  }
+
+  parameter "commands" {
+    type = list(string)
+  }
+
+  run "shell" {
+    commands = param.commands
+    dir      = "${context.sourcedir}/projects/helmfiles/${opt.project}"
+    project  = opt.project
+    tenant   = opt.tenant
+    env = {
+      AWS_PROFILE = "nbo-${opt.tenant}-helm"
+      TENANT      = opt.tenant
+      PROJECT     = opt.project
+      KUBECONFIG  = "~/.kube/kubecfg.${opt.tenant}-helm"
+    }
+  }
+}
