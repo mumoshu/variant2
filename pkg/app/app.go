@@ -970,12 +970,10 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 		},
 	}
 
-	vars, err := getVarialbles(ctx, t.Variables)
+	ctx, err := addVariables(ctx, t.Variables)
 	if err != nil {
 		return nil, err
 	}
-
-	ctx.Variables["var"] = vars
 
 	caseFields := map[string]cty.Value{}
 
@@ -1637,19 +1635,9 @@ func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[stri
 		},
 	}
 
-	vars, err := getVarialbles(varCtx, varSpecs)
+	jobCtx, err := addVariables(varCtx, varSpecs)
 	if err != nil {
 		return nil, err
-	}
-
-	jobCtx := &hcl2.EvalContext{
-		Functions: conf.Functions("."),
-		Variables: map[string]cty.Value{
-			"param":   cty.ObjectVal(params),
-			"opt":     cty.ObjectVal(opts),
-			"var":     vars,
-			"context": ctx,
-		},
 	}
 
 	mod, err := getModule(jobCtx, cc.Module, j.Module)
@@ -1811,7 +1799,7 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 	return cty.ObjectVal(confFields), nil
 }
 
-func getVarialbles(varCtx *hcl2.EvalContext, varSpecs []Variable) (cty.Value, error) {
+func addVariables(varCtx *hcl2.EvalContext, varSpecs []Variable) (*hcl2.EvalContext, error) {
 	varFields := map[string]cty.Value{}
 
 	for _, varSpec := range varSpecs {
@@ -1824,25 +1812,25 @@ func getVarialbles(varCtx *hcl2.EvalContext, varSpecs []Variable) (cty.Value, er
 
 			tpe, diags = typeexpr.TypeConstraint(varSpec.Type)
 			if diags != nil {
-				return cty.ObjectVal(varFields), diags
+				return varCtx, diags
 			}
 		}
 
 		if tpe.IsListType() && tpe.ListElementType().Equals(cty.String) {
 			var v []string
 			if err := gohcl2.DecodeExpression(varSpec.Value, varCtx, &v); err != nil {
-				return cty.ObjectVal(varFields), err
+				return varCtx, err
 			}
 
 			if vty, err := gocty.ImpliedType(v); err != nil {
-				return cty.ObjectVal(varFields), err
+				return varCtx, err
 			} else if vty != tpe {
-				return cty.ObjectVal(varFields), fmt.Errorf("unexpected type of option. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
+				return varCtx, fmt.Errorf("unexpected type of option. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
 			}
 
 			val, err := gocty.ToCtyValue(v, tpe)
 			if err != nil {
-				return cty.ObjectVal(varFields), err
+				return varCtx, err
 			}
 
 			varFields[varSpec.Name] = val
@@ -1850,20 +1838,22 @@ func getVarialbles(varCtx *hcl2.EvalContext, varSpecs []Variable) (cty.Value, er
 			var v cty.Value
 
 			if err := gohcl2.DecodeExpression(varSpec.Value, varCtx, &v); err != nil {
-				return cty.ObjectVal(varFields), err
+				return varCtx, err
 			}
 
 			vty := v.Type()
 
 			if !tv.IsNull() && !vty.Equals(tpe) {
-				return cty.ObjectVal(varFields), fmt.Errorf("unexpected type of value for variable. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
+				return varCtx, fmt.Errorf("unexpected type of value for variable. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
 			}
 
 			varFields[varSpec.Name] = v
 		}
+
+		varCtx.Variables["var"] = cty.ObjectVal(varFields)
 	}
 
-	return cty.ObjectVal(varFields), nil
+	return varCtx, nil
 }
 
 func nonEmptyExpression(x hcl2.Expression) bool {

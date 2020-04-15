@@ -1,0 +1,40 @@
+option "x1" {
+  type = string
+  default = "X1"
+}
+
+parameter "x2" {
+  type = string
+  default = "X2"
+}
+
+variable "a" {
+  value = "A+${opt.x1}+${param.x2}"
+}
+
+job "example" {
+  option "y1" {
+     type = string
+     default = "Y1"
+  }
+
+  parameter "y2" {
+    type = string
+    default = "Y2"
+  }
+
+  variable "b" {
+    # You can reference the global variable "a" from within a job-local variable "b"
+    value = "B+${opt.y1}+${param.y2}+${var.a}"
+  }
+
+  variable "c" {
+    # YOu can reference the local variable from within a local variable in the same job
+    value = "C+${var.b}"
+  }
+
+  exec {
+    command = "bash"
+    args = ["-c", "echo ${var.c}"]
+  }
+}

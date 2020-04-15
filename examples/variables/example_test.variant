@@ -1,0 +1,20 @@
+test "example" {
+  case "ok" {
+    out = trimspace(<<EOS
+C+B+Y1+Y2+A+X1+X2
+EOS
+    )
+    exitstatus = 0
+  }
+
+  run "example" {
+  }
+
+  assert "out" {
+    condition = run.res.stdout == case.out
+  }
+
+  assert "exitstatus" {
+    condition = run.res.exitstatus == case.exitstatus
+  }
+}
