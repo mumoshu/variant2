@@ -423,11 +423,47 @@ It is designed to allow concise descriptions of your command. The Variant langua
 
 In addition to everything available via the [native HCL syntax](https://github.com/hashicorp/hcl/blob/hcl2/hclsyntax/spec.md), Variant language provides the following HCL `blocks` and `functions` to declare your command.
 
+- [Blocks](#blocks)
+- [Functions](#functions)
+- [Examples](#examples)
+
 ### Blocks
+
+- [Job](#job)
+- [Parameter](#parameter)
+- [Option](#option)
+- [Run](#run)
+  - [Indirect Run](#indirect-run)
+- [Exec](#exec)
+- [Config](#config)
+- [Test](#test)
+- Steps
+- Asserts
 
 #### job
 
 `job "CMD SUBCMD {}` is a job that can be run via `run "CMD SUBCMD" {}` or `variant run CMD SUBCMD`
+
+Do only one thing in each "job"
+
+Each job can contain any of the followings, but not two or more of them:
+
+- assert
+- exec
+- run
+- step
+
+This restriction ensures that you can do only one thing in each job, which makes testing and reading the code easier.
+
+That is, a job containing `assert` can be used as a custom assertion "function" and nothing else.
+
+A job containing one or more `step`s can be used as a workflow composed of multiple jobs. Each `step` is restricted to call a single `job`. As each `job` is easily unit testable, this ensures that you can test the workflow without dealing with each job's implementation.
+
+Options:
+
+`job` has the following attributes:
+
+- `private`: when set to `true` by writing `private = true`, the job is hidden from the command-line help.
 
 #### parameter
 
@@ -544,58 +580,32 @@ job "another job" {
 }
 ```
 
+#### Indirect Run
+
+Sometimes you'd encounter a situation that you need indirection.
+
+That is, the job name must be dynamically determined depending on a variable, parameter, or an option.
+
+Variant2 provides an alternative `run` block syntax for that, which basically omits the NAME label in the `run "NAME" { }` you've previously seen:
+
+To call the `example` job with the parameter `foo` set to `"FOO"` and the option `bar` set to `"BAR"`, you write the `run` block like the below:
+
+```hcl
+run {
+  job = "example"
+
+  with = {
+    foo = "FOO"
+    bar = "BAR"
+  }
+}
+```
+
 #### step
 
+TODO
+
 #### exec
-
-**Functions**:
-
-- All the [Terraform built-in functions](https://www.terraform.io/docs/configuration/functions.html)
-- Plus a few Variant-specific functions
-  - `jsonpath` ([definition](/pkg/conf/jsonpath.go#L26), [example](/examples/complex/complex.variant#L6))
-
-
-### Examples
-
-To learn more, see [examples](https://github.com/mumoshu/variant2/tree/master/examples) for working examples covering all these `blocks` and `functions`.
-
-Optionally read the following for overviews on each type of block and functions.
-
-### Blocks
-
-- [Job](#job)
-- Parameters
-- Options
-- Tests
-- Exec's
-- Asserts
-- Runs
-- Steps
-
-#### Job
-
-Do only one thing in each "job"
-
-Each job can contain any of the followings, but not two or more of them:
-
-- assert
-- exec
-- run
-- step
-
-This restriction ensures that you can do only one thing in each job, which makes testing and reading the code easier.
-
-That is, a job containing `assert` can be used as a custom assertion "function" and nothing else.
-
-A job containing one or more `step`s can be used as a workflow composed of multiple jobs. Each `step` is restricted to call a single `job`. As each `job` is easily unit testable, this ensures that you can test the workflow without dealing with each job's implementation.
-
-Options:
-
-`job` has the following attributes:
-
-- `private`: when set to `true` by writing `private = true`, the job is hidden from the command-line help.
-
-#### Exec
 
 An `exec` block executes the OS command.
 
@@ -605,6 +615,18 @@ Available attributes:
 - `args`: The arguments to be passed to the command
 - `env`: The environment variables given to the command
 - `dir`: The working directory
+
+### Functions
+
+- All the [Terraform built-in functions](https://www.terraform.io/docs/configuration/functions.html)
+- Plus a few Variant-specific functions
+  - `jsonpath` ([definition](/pkg/conf/jsonpath.go#L26), [example](/examples/complex/complex.variant#L6))
+
+### Examples
+
+To learn more, see [examples](https://github.com/mumoshu/variant2/tree/master/examples) for working examples covering all these `blocks` and `functions`.
+
+Optionally read the following for overviews on each type of block and functions.
 
 ### JSON Configuration Syntax
 

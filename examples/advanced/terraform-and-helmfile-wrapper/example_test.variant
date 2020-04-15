@@ -1,0 +1,27 @@
+test "deploy-all" {
+  case "ok1" {
+    exitstatus = 0
+    err = ""
+    out = <<EOS
+running helmfile apply in helmfiles/a
+running terraform init in terraform/b
+running terraform apply in terraform/b
+EOS
+  }
+
+  run "deploy-all" {
+
+  }
+
+  assert "error" {
+    condition = run.err == case.err
+  }
+
+  assert "out" {
+    condition = (run.res.set && run.res.stdout == case.out) || !run.res.set
+  }
+
+  assert "exitstatus" {
+    condition = run.res.exitstatus == case.exitstatus
+  }
+}

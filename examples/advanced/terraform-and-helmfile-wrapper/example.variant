@@ -1,0 +1,101 @@
+job "deploy-all" {
+  variable "targets" {
+    value = list(
+      {
+        dir = "helmfiles/a"
+        type = "helmfile"
+      },
+      {
+        dir = "terraform/b"
+        type = "terraform"
+      }
+    )
+  }
+
+  depends_on "deploy" {
+    items = var.targets
+
+    args = {
+      dir = item.dir
+      type = item.type
+    }
+  }
+}
+
+job "deploy" {
+  parameter "dir" {
+    type = string
+  }
+
+  option "type" {
+    type = string
+  }
+
+  variable "runs" {
+    value = {
+      helmfile = {
+         name = "helmfile deploy"
+         args = {
+           dir = param.dir
+         }
+      }
+
+      terraform = {
+        name = "terraform deploy"
+        args = {
+          dir = param.dir
+        }
+      }
+    }
+  }
+
+  variable "job" {
+    value = var.runs[opt.type]
+  }
+
+  run {
+    job = var.job.name
+    with = var.job.args
+  }
+}
+
+job "terraform deploy" {
+  parameter "dir" {
+    type = string
+  }
+
+  step "init" {
+    run "echo" {
+      text = "running terraform init in ${param.dir}"
+    }
+  }
+
+  step "apply" {
+    run "echo" {
+      text = "running terraform apply in ${param.dir}"
+    }
+  }
+}
+
+job "helmfile deploy" {
+  parameter "dir" {
+    type = string
+  }
+
+  step "apply" {
+    run "echo" {
+      text = "running helmfile apply in ${param.dir}"
+    }
+  }
+}
+
+job "echo" {
+  parameter "text" {
+    type = string
+  }
+
+  exec {
+    command = "bash"
+    args = ["-c", "echo ${param.text}"]
+  }
+}

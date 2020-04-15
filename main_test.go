@@ -171,6 +171,11 @@ func TestExamples(t *testing.T) {
 			args:    []string{"variant", "test"},
 			wd:      "./examples/variables",
 		},
+		{
+			subject: "examples/advaned/terraform-and-helmfile-wrapper",
+			args:    []string{"variant", "test"},
+			wd:      "./examples/advanced/terraform-and-helmfile-wrapper",
+		},
 	}
 
 	for i := range testcases {

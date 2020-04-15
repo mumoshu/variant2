@@ -126,7 +126,7 @@ type SourceFile struct {
 type Step struct {
 	Name string `hcl:"name,label"`
 
-	Run RunJob `hcl:"run,block"`
+	Run StaticRun `hcl:"run,block"`
 
 	Needs *[]string `hcl:"need,attr"`
 }
@@ -148,10 +148,23 @@ type DependsOn struct {
 	Args  hcl2.Expression `hcl:"args,attr"`
 }
 
-type RunJob struct {
+type LazyStaticRun struct {
+	Run StaticRun `hcl:"run,block"`
+}
+
+type StaticRun struct {
 	Name string `hcl:"name,label"`
 
 	Args map[string]hcl2.Expression `hcl:",remain"`
+}
+
+type LazyDynamicRun struct {
+	Run DynamicRun `hcl:"run,block"`
+}
+
+type DynamicRun struct {
+	Job  string          `hcl:"job,attr"`
+	Args hcl2.Expression `hcl:"with,attr"`
 }
 
 type Parameter struct {
@@ -216,7 +229,6 @@ type JobSpec struct {
 	Exec   *Exec           `hcl:"exec,block"`
 	Assert []Assert        `hcl:"assert,block"`
 	Fail   hcl2.Expression `hcl:"fail,attr"`
-	Run    *RunJob         `hcl:"run,block"`
 	Import *string         `hcl:"import,attr"`
 
 	// Private hides the job from `variant run -h` when set to true
@@ -225,6 +237,8 @@ type JobSpec struct {
 	Log *LogSpec `hcl:"log,block"`
 
 	Steps []Step `hcl:"step,block"`
+
+	Body hcl2.Body `hcl:",remain"`
 }
 
 type LogSpec struct {
@@ -240,7 +254,7 @@ type Collect struct {
 }
 
 type Forward struct {
-	Run *RunJob `hcl:"run,block"`
+	Run *StaticRun `hcl:"run,block"`
 }
 
 type Assert struct {
@@ -260,7 +274,7 @@ type Test struct {
 
 	Variables []Variable `hcl:"variable,block"`
 	Cases     []Case     `hcl:"case,block"`
-	Run       RunJob     `hcl:"run,block"`
+	Run       StaticRun  `hcl:"run,block"`
 	Assert    []Assert   `hcl:"assert,block"`
 
 	SourceLocator hcl2.Expression `hcl:"__source_locator,attr"`
@@ -771,16 +785,20 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 
 	var depStdout string
 
+	var lastDepRes *Result
+
 	if j.Deps != nil {
 		for i := range j.Deps {
 			d := j.Deps[i]
 
-			res, err = app.execMultiRun(l, ctx, &d)
+			var err error
+
+			lastDepRes, err = app.execMultiRun(l, ctx, &d)
 			if err != nil {
 				return nil, err
 			}
 
-			depStdout += res.Stdout
+			depStdout += lastDepRes.Stdout
 		}
 	}
 
@@ -818,15 +836,45 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 		if err := l.LogExec(cmd, args); err != nil {
 			return nil, err
 		}
-	} else if j.Run != nil {
-		res, err = app.execRun(l, ctx, j.Run, new(sync.Mutex))
-	} else if j.Assert != nil {
-		for _, a := range j.Assert {
-			if err2 := app.execAssert(ctx, a); err2 != nil {
-				return nil, err2
+	} else {
+		either := eitherJobRun{}
+
+		var lazyDynamicRun LazyDynamicRun
+
+		var lazyStaticRun LazyStaticRun
+
+		sErr := gohcl2.DecodeBody(j.Body, ctx, &lazyStaticRun)
+
+		if sErr.HasErrors() {
+			dErr := gohcl2.DecodeBody(j.Body, ctx, &lazyDynamicRun)
+
+			if dErr != nil {
+				sErrMsg := sErr.Error()
+				if !strings.Contains(sErrMsg, "Missing run block") && !strings.Contains(sErrMsg, "Missing name for run") {
+					return nil, sErr
+				}
+
+				dErrMsg := dErr.Error()
+				if !strings.Contains(dErrMsg, "Missing run block") {
+					return nil, dErr
+				}
+			} else {
+				either.dynamic = &lazyDynamicRun.Run
 			}
+		} else {
+			either.static = &lazyStaticRun.Run
 		}
-		return &Result{}, nil
+
+		if either.static != nil || either.dynamic != nil {
+			res, err = app.runJobAndUpdateContext(l, ctx, either, new(sync.Mutex))
+		} else if j.Assert != nil {
+			for _, a := range j.Assert {
+				if err2 := app.execAssert(ctx, a); err2 != nil {
+					return nil, err2
+				}
+			}
+			return &Result{}, nil
+		}
 	}
 
 	if j.Assert != nil && len(j.Assert) > 0 {
@@ -837,6 +885,21 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 		}
 	}
 
+	if res == nil {
+		// The job contained only `depends_on` block(s)
+		// Treat the result of depends_on as the result of this job
+		if lastDepRes != nil {
+			lastDepRes.Stdout = depStdout
+
+			return lastDepRes, nil
+		}
+
+		// The job had no operation
+		return res, nil
+	}
+
+	// The job contained job or step(s).
+	// If we also had depends_on block(s), concat all the results
 	if depStdout != "" {
 		res.Stdout = depStdout + res.Stdout
 	}
@@ -989,7 +1052,7 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 	caseVal := cty.ObjectVal(caseFields)
 	ctx.Variables["case"] = caseVal
 
-	res, err := app.execRun(nil, ctx, &t.Run, new(sync.Mutex))
+	res, err := app.runJobAndUpdateContext(nil, ctx, eitherJobRun{static: &t.Run}, new(sync.Mutex))
 
 	if res == nil && err != nil {
 		return nil, err
@@ -1044,24 +1107,26 @@ func (res *Result) toCty() cty.Value {
 	})
 }
 
-func (app *App) execRunInternal(l *EventLogger, jobCtx *hcl2.EvalContext, run *RunJob) (*Result, error) {
-	args := map[string]interface{}{}
+func (app *App) execRunInternal(l *EventLogger, jobCtx *hcl2.EvalContext, run eitherJobRun) (*Result, error) {
+	var jobRun *jobRun
 
-	for k := range run.Args {
-		var v cty.Value
-		if diags := gohcl2.DecodeExpression(run.Args[k], jobCtx, &v); diags.HasErrors() {
-			return nil, diags
-		}
+	var err error
 
-		vv, err := ctyToGo(v)
+	if run.static != nil {
+		jobRun, err = staticRunToJob(jobCtx, run.static)
+
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		jobRun, err = dynamicRunToJob(jobCtx, run.dynamic)
 
-		args[k] = vv
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return app.execRunArgs(l, run.Name, args)
+	return app.execRunArgs(l, jobRun.Name, jobRun.Args)
 }
 
 func (app *App) execRunArgs(l *EventLogger, name string, args map[string]interface{}) (*Result, error) {
@@ -1128,22 +1193,10 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *hcl2.EvalContext, r *Depend
 
 			iterCtx.Variables["item"] = v
 
-			args := map[string]interface{}{}
+			args, err := exprToGoMap(iterCtx, r.Args)
 
-			ctyArgs := map[string]cty.Value{}
-
-			if err := gohcl2.DecodeExpression(r.Args, iterCtx, &ctyArgs); err != nil {
+			if err != nil {
 				return nil, err
-			}
-
-			for k, v := range ctyArgs {
-				var err error
-
-				args[k], err = ctyToGo(v)
-
-				if err != nil {
-					return nil, err
-				}
 			}
 
 			res, err := app.execRunArgs(l, r.Name, args)
@@ -1191,7 +1244,29 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *hcl2.EvalContext, r *Depend
 	return res, nil
 }
 
-func (app *App) execRun(l *EventLogger, jobCtx *hcl2.EvalContext, run *RunJob, m sync.Locker) (*Result, error) {
+func exprToGoMap(ctx *hcl2.EvalContext, expr hcl2.Expression) (map[string]interface{}, error) {
+	args := map[string]interface{}{}
+
+	ctyArgs := map[string]cty.Value{}
+
+	if err := gohcl2.DecodeExpression(expr, ctx, &ctyArgs); err != nil {
+		return nil, err
+	}
+
+	for k, v := range ctyArgs {
+		var err error
+
+		args[k], err = ctyToGo(v)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return args, nil
+}
+
+func (app *App) runJobAndUpdateContext(l *EventLogger, jobCtx *hcl2.EvalContext, run eitherJobRun, m sync.Locker) (*Result, error) {
 	res, err := app.execRunInternal(l, jobCtx, run)
 
 	if res == nil {
@@ -1260,6 +1335,14 @@ func ctyToGo(v cty.Value) (interface{}, error) {
 		}
 
 		vv = vvv
+	case cty.Map(cty.String):
+		m := map[string]string{}
+
+		if err := gocty.FromCtyValue(v, &v); err != nil {
+			return nil, err
+		}
+
+		vv = m
 	default:
 		if tpe.IsTupleType() {
 			var elemTpe *cty.Type
@@ -1359,7 +1442,7 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *hcl2.EvalContext, results m
 		s := steps[i]
 
 		f := func() (*Result, error) {
-			res, err := app.execRun(l, &hclCtx, &s.Run, m)
+			res, err := app.runJobAndUpdateContext(l, &hclCtx, eitherJobRun{static: &s.Run}, m)
 			if err != nil {
 				return res, err
 			}
@@ -1399,6 +1482,13 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *hcl2.EvalContext, results m
 		return nil, err
 	}
 
+	type result struct {
+		r   *Result
+		err error
+	}
+
+	var rs []result
+
 	for _, nodes := range plan {
 		ids := []string{}
 		for _, n := range nodes {
@@ -1411,12 +1501,7 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *hcl2.EvalContext, results m
 
 		var wg sync.WaitGroup
 
-		type result struct {
-			r   *Result
-			err error
-		}
-
-		rs := make([]result, len(ids))
+		rs = make([]result, len(ids))
 
 		var rsm sync.Mutex
 
@@ -1462,6 +1547,24 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *hcl2.EvalContext, results m
 		if rese != nil && rese.Len() > 0 {
 			return lastRes, rese
 		}
+	}
+
+	if len(rs) > 0 {
+		var sum Result
+
+		sum.ExitStatus = lastRes.ExitStatus
+
+		for i, r := range rs {
+			if i != 0 {
+				sum.Stdout += "\n"
+				sum.Stderr += "\n"
+			}
+
+			sum.Stdout += r.r.Stdout
+			sum.Stderr += r.r.Stderr
+		}
+
+		return &sum, nil
 	}
 
 	return lastRes, nil

@@ -72,7 +72,7 @@ func (app *App) newLogCollector(file string, j JobSpec, jobCtx *hcl.EvalContext)
 			jobCtx.Variables["log"] = logCty
 
 			for _, f := range j.Log.Forwards {
-				_, err := app.execRunInternal(nil, jobCtx, f.Run)
+				_, err := app.execRunInternal(nil, jobCtx, eitherJobRun{static: f.Run})
 				if err != nil {
 					return err
 				}
