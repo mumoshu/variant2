@@ -1,0 +1,22 @@
+test "example" {
+  case "ok" {
+    out = trimspace(<<EOS
+deploy switch tenant=mytenant item=foo
+deploy switch tenant=mytenant item=bar
+Done.
+EOS
+    )
+    exitstatus = 0
+  }
+
+  run "example" {
+  }
+
+  assert "out" {
+    condition = run.res.stdout == case.out
+  }
+
+  assert "exitstatus" {
+    condition = run.res.exitstatus == case.exitstatus
+  }
+}

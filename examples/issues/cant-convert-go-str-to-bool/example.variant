@@ -1,0 +1,50 @@
+job "deploy switch" {
+  option "dry-run" {
+    type = bool
+  }
+
+  option "item" {
+    type = string
+  }
+
+  option "tenant" {
+    type = string
+  }
+
+  exec {
+    command = "bash"
+    args = ["-c", "echo deploy switch tenant=${opt.tenant} item=${opt.item}"]
+  }
+}
+
+job "example" {
+  config "file" {
+    source file {
+     path = "${context.sourcedir}/conf.yaml"
+   }
+  }
+
+  option "dry-run" {
+    type = bool
+    default = false
+  }
+
+  parameter "tenant" {
+    type = string
+    default = "mytenant"
+  }
+
+  depends_on "deploy switch" {
+    items = conf.file.order
+    args = {
+      dry-run = opt.dry-run
+      item    = item
+      tenant  = param.tenant
+    }
+  }
+
+  exec {
+    command = "bash"
+    args = ["-c", "echo Done."]
+  }
+}

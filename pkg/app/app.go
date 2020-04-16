@@ -1247,11 +1247,18 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *hcl2.EvalContext, r *Depend
 func exprToGoMap(ctx *hcl2.EvalContext, expr hcl2.Expression) (map[string]interface{}, error) {
 	args := map[string]interface{}{}
 
-	ctyArgs := map[string]cty.Value{}
+	// We need to explicitly specify that the type of values is DynamicPseudoType.
+	//
+	// Otherwise, for e.g. map[string]cty.Value{], DecodeExpression computes the lowest common type for all the values.
+	// That is, {"foo":true,"bar":"BAR"} would produce cty.Map(cty.String) = map[string]string,
+	// rather than cty.Map(DynamicPseudoType) = map[string]interface{}.
+	m := cty.MapValEmpty(cty.DynamicPseudoType)
 
-	if err := gohcl2.DecodeExpression(expr, ctx, &ctyArgs); err != nil {
+	if err := gohcl2.DecodeExpression(expr, ctx, &m); err != nil {
 		return nil, err
 	}
+
+	ctyArgs := m.AsValueMap()
 
 	for k, v := range ctyArgs {
 		var err error

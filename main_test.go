@@ -162,6 +162,11 @@ func TestExamples(t *testing.T) {
 			wd:      "./examples/issues/sweetops-CFFQ9GFB5-p1586798062189700",
 		},
 		{
+			subject: "examples/issues/cant-convert-go-str-to-bool",
+			args:    []string{"variant", "test"},
+			wd:      "./examples/issues/cant-convert-go-str-to-bool",
+		},
+		{
 			subject: "examples/exec",
 			args:    []string{"variant", "test"},
 			wd:      "./examples/exec",
