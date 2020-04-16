@@ -692,10 +692,26 @@ type Command struct {
 }
 
 func (app *App) execCmd(cmd Command, log bool) (*Result, error) {
+	env := map[string]string{}
+
+	// We need to explicitly inherit os envvars.
+	// Otherwise the command is executed in an env that misses all of them, including the important one like PATH,
+	// which is confusing to users.
+	// Perhaps in the future, we could introduce a `exec` block attribute to optionally turn off the inheritance.
+	for _, e := range os.Environ() {
+		pair := strings.Split(e, "=")
+
+		env[pair[0]] = pair[1]
+	}
+
+	for k, v := range cmd.Env {
+		env[k] = v
+	}
+
 	shellCmd := &shell.Command{
 		Name: cmd.Name,
 		Args: cmd.Args,
-		Env:  cmd.Env,
+		Env:  env,
 		Dir:  cmd.Dir,
 	}
 
