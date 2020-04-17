@@ -1,0 +1,26 @@
+test "example" {
+  case "ok" {
+    out = <<EOS
+sub:global_param=A
+sub:global_opt=B
+sub:param1=E
+
+example:global_param=A
+example:global_opt=B
+example:local_param=C
+example:local_opt=D
+EOS
+    exitstatus = 0
+  }
+
+  run "example" {
+  }
+
+  assert "out" {
+    condition = run.res.stdout == case.out
+  }
+
+  assert "exitstatus" {
+    condition = run.res.exitstatus == case.exitstatus
+  }
+}

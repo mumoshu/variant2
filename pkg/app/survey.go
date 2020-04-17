@@ -10,25 +10,26 @@ import (
 	"strings"
 )
 
-type PendingOption struct {
-	Spec OptionSpec
-	Type cty.Type
+type PendingInput struct {
+	Name        string
+	Description *string
+	Type        cty.Type
 }
 
-func MakeQuestions(pendingOptions []PendingOption) ([]*survey.Question, map[string]survey.Transformer, error) {
+func MakeQuestions(pendingOptions []PendingInput) ([]*survey.Question, map[string]survey.Transformer, error) {
 	qs := []*survey.Question{}
 
 	transformers := map[string]survey.Transformer{}
 
 	for _, op := range pendingOptions {
-		name := op.Spec.Name
+		name := op.Name
 
 		var msg string
 
 		var description string
 
-		if op.Spec.Description != nil {
-			description = *op.Spec.Description
+		if op.Description != nil {
+			description = *op.Description
 		}
 
 		msg = name
@@ -131,7 +132,7 @@ func MakeQuestions(pendingOptions []PendingOption) ([]*survey.Question, map[stri
 				return nil
 			}
 		default:
-			return nil, nil, fmt.Errorf("option %q: unexpected type %q", op.Spec.Name, op.Type.FriendlyName())
+			return nil, nil, fmt.Errorf("option %q: unexpected type %q", op.Name, op.Type.FriendlyName())
 		}
 
 		validators := []survey.Validator{survey.Required}
@@ -154,9 +155,9 @@ func MakeQuestions(pendingOptions []PendingOption) ([]*survey.Question, map[stri
 	return qs, transformers, nil
 }
 
-type SetOptsFunc func(opts map[string]cty.Value, pendingOptions []PendingOption) error
+type SetOptsFunc func(opts map[string]cty.Value, pendingOptions []PendingInput) error
 
-func DefaultSetOpts(opts map[string]cty.Value, pendingOptions []PendingOption) error {
+func DefaultSetOpts(opts map[string]cty.Value, pendingOptions []PendingInput) error {
 	qs, transformers, err := MakeQuestions(pendingOptions)
 	if err != nil {
 		return err

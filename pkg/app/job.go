@@ -1,11 +1,5 @@
 package app
 
-import (
-	"github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/hcl/v2/gohcl"
-	"github.com/zclconf/go-cty/cty"
-)
-
 type eitherJobRun struct {
 	static  *StaticRun
 	dynamic *DynamicRun
@@ -16,21 +10,20 @@ type jobRun struct {
 	Args map[string]interface{}
 }
 
-func staticRunToJob(jobCtx *hcl.EvalContext, run *StaticRun) (*jobRun, error) {
+func staticRunToJob(jobCtx *JobContext, run *StaticRun) (*jobRun, error) {
+	localArgs, err := exprMapToGoMap(jobCtx.evalContext, run.Args)
+	if err != nil {
+		return nil, err
+	}
+
 	args := map[string]interface{}{}
 
-	for k := range run.Args {
-		var v cty.Value
-		if diags := gohcl.DecodeExpression(run.Args[k], jobCtx, &v); diags.HasErrors() {
-			return nil, diags
-		}
+	for k, v := range jobCtx.globalArgs {
+		args[k] = v
+	}
 
-		vv, err := ctyToGo(v)
-		if err != nil {
-			return nil, err
-		}
-
-		args[k] = vv
+	for k, v := range localArgs {
+		args[k] = v
 	}
 
 	return &jobRun{
@@ -39,11 +32,20 @@ func staticRunToJob(jobCtx *hcl.EvalContext, run *StaticRun) (*jobRun, error) {
 	}, nil
 }
 
-func dynamicRunToJob(jobCtx *hcl.EvalContext, run *DynamicRun) (*jobRun, error) {
-	args, err := exprToGoMap(jobCtx, run.Args)
-
+func dynamicRunToJob(jobCtx *JobContext, run *DynamicRun) (*jobRun, error) {
+	localArgs, err := exprToGoMap(jobCtx.evalContext, run.Args)
 	if err != nil {
 		return nil, err
+	}
+
+	args := map[string]interface{}{}
+
+	for k, v := range jobCtx.globalArgs {
+		args[k] = v
+	}
+
+	for k, v := range localArgs {
+		args[k] = v
 	}
 
 	return &jobRun{

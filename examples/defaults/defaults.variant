@@ -17,13 +17,13 @@ option "emptymap" {
 }
 
 option "sometuple" {
-  type = tuple([string,number])
-  default = ["x", 1]
+  type = tuple([string,number,bool])
+  default = ["x", 1, true]
 }
 
 option "someobj" {
-  type = object({foo=string, bar=number})
-  default = {foo="FOO", bar=1}
+  type = object({foo=string, bar=number, baz=bool})
+  default = {foo="FOO", bar=1, baz=true}
 }
 
 job "example" {
@@ -46,13 +46,17 @@ emptymap.foo=${try(opt.emptymap.foo, "FOO")}
 
 sometuple.0=${opt.sometuple.0}
 sometuple.1=${opt.sometuple.1}
+sometuple.2=${opt.sometuple.2}
 sometuple[0]=${opt.sometuple[0]}
 sometuple[1]=${opt.sometuple[1]}
+sometuple[2]=${opt.sometuple[2]}
 
 someobj.foo=${opt.someobj.foo}
 someobj.bar=${opt.someobj.bar}
+someobj.baz=${opt.someobj.baz}
 someobj["foo"]=${opt.someobj["foo"]}
 someobj["bar"]=${opt.someobj["bar"]}
+someobj["baz"]=${opt.someobj["baz"]}
 EOF
 EOS
     ]

@@ -25,16 +25,16 @@ func (r *Runner) StartSlackbot(name string) error {
 		err := r.Run(strings.Split(cmd, " "), RunOptions{
 			Stdout: &b,
 			Stderr: &b,
-			SetOpts: func(opts map[string]cty.Value, pendingOptions []app.PendingOption) error {
+			SetOpts: func(opts map[string]cty.Value, pendingOptions []app.PendingInput) error {
 				var elems []slack.DialogElement
 
 				for _, o := range pendingOptions {
-					k := o.Spec.Name
+					k := o.Name
 
 					var desc string
 
-					if o.Spec.Description != nil {
-						desc = *o.Spec.Description
+					if o.Description != nil {
+						desc = *o.Description
 					}
 
 					var elem slack.DialogElement
@@ -93,7 +93,7 @@ func (r *Runner) StartSlackbot(name string) error {
 					errs := map[string]error{}
 
 					for _, o := range pendingOptions {
-						k := o.Spec.Name
+						k := o.Name
 						v := callback.Submission[k]
 
 						if v == "" {

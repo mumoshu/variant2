@@ -1,0 +1,72 @@
+parameter "global_param" {
+  type = string
+  default = "A"
+}
+
+option "global_opt" {
+  type = string
+  default = "B"
+}
+
+job "example" {
+  parameter "local_param" {
+    type = string
+    default = "C"
+  }
+
+  option "local_opt" {
+    type = string
+    default = "D"
+  }
+
+  step "call sub" {
+    run "sub" {
+      param1 = "E"
+    }
+  }
+
+  step "call echo" {
+    run "echo" {
+      text = <<EOS
+example:global_param=${param.global_param}
+example:global_opt=${opt.global_opt}
+example:local_param=${param.local_param}
+example:local_opt=${opt.local_opt}
+EOS
+    }
+  }
+}
+
+job "sub" {
+  parameter "param1" {
+    type = string
+  }
+
+  run {
+    job = "echo"
+    with = {
+      text = <<EOS
+sub:global_param=${param.global_param}
+sub:global_opt=${opt.global_opt}
+sub:param1=${param.param1}
+EOS
+    }
+  }
+}
+
+job "echo" {
+  option "text" {
+    type = string
+  }
+
+  exec {
+    command = "bash"
+    args = [
+     "-c", <<EOS
+cat <<EOF
+${opt.text}
+EOF
+EOS
+    ]
+  }
+}

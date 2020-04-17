@@ -3,26 +3,25 @@ package app
 import (
 	"fmt"
 
-	"github.com/hashicorp/hcl/v2"
 	gohcl2 "github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/zclconf/go-cty/cty"
 )
 
-func (app *App) newLogCollector(file string, j JobSpec, jobCtx *hcl.EvalContext) LogCollector {
+func (app *App) newLogCollector(file string, j JobSpec, jobCtx *JobContext) LogCollector {
 	logCollector := LogCollector{
 		FilePath: file,
 		CollectFn: func(evt Event) (*string, bool, error) {
 			condVars := map[string]cty.Value{}
-			for k, v := range jobCtx.Variables {
+			for k, v := range jobCtx.evalContext.Variables {
 				condVars[k] = v
 			}
 			condVars["event"] = evt.toCty()
-			condCtx := jobCtx
+			condCtx := *jobCtx.evalContext
 			condCtx.Variables = condVars
 
 			for _, c := range j.Log.Collects {
 				var condVal cty.Value
-				if diags := gohcl2.DecodeExpression(c.Condition, condCtx, &condVal); diags.HasErrors() {
+				if diags := gohcl2.DecodeExpression(c.Condition, &condCtx, &condVal); diags.HasErrors() {
 					return nil, false, diags
 				}
 				vv, err := ctyToGo(condVal)
@@ -40,15 +39,15 @@ func (app *App) newLogCollector(file string, j JobSpec, jobCtx *hcl.EvalContext)
 				}
 
 				formatVars := map[string]cty.Value{}
-				for k, v := range jobCtx.Variables {
+				for k, v := range jobCtx.evalContext.Variables {
 					formatVars[k] = v
 				}
 				formatVars["event"] = evt.toCty()
-				formatCtx := jobCtx
+				formatCtx := *jobCtx.evalContext
 				formatCtx.Variables = condVars
 
 				var formatVal cty.Value
-				if diags := gohcl2.DecodeExpression(c.Format, formatCtx, &formatVal); diags.HasErrors() {
+				if diags := gohcl2.DecodeExpression(c.Format, &formatCtx, &formatVal); diags.HasErrors() {
 					return nil, false, diags
 				}
 				formatV, err := ctyToGo(formatVal)
@@ -69,10 +68,14 @@ func (app *App) newLogCollector(file string, j JobSpec, jobCtx *hcl.EvalContext)
 			logCty := cty.MapVal(map[string]cty.Value{
 				"file": cty.StringVal(log.File),
 			})
-			jobCtx.Variables["log"] = logCty
+			evalCtx := *jobCtx.evalContext
+			evalCtx.Variables["log"] = logCty
+
+			newJobCtx := *jobCtx
+			newJobCtx.evalContext = &evalCtx
 
 			for _, f := range j.Log.Forwards {
-				_, err := app.execRunInternal(nil, jobCtx, eitherJobRun{static: f.Run})
+				_, err := app.execRunInternal(nil, &newJobCtx, eitherJobRun{static: f.Run})
 				if err != nil {
 					return err
 				}

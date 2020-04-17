@@ -543,6 +543,8 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			return nil, err
 		}
 
+		jobEvalCtx := jobCtx.evalContext
+
 		if l == nil {
 			l = NewEventLogger(cmd, args, opts)
 			l.Stderr = app.Stderr
@@ -560,7 +562,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			var file string
 
 			if nonEmptyExpression(j.Log.File) {
-				if diags := gohcl2.DecodeExpression(j.Log.File, jobCtx, &file); diags.HasErrors() {
+				if diags := gohcl2.DecodeExpression(j.Log.File, jobEvalCtx, &file); diags.HasErrors() {
 					app.PrintDiags(diags)
 					return nil, diags
 				}
@@ -579,7 +581,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 				var stream string
 
 				if nonEmptyExpression(j.Log.Stream) {
-					if diags := gohcl2.DecodeExpression(j.Log.Stream, jobCtx, &stream); diags.HasErrors() {
+					if diags := gohcl2.DecodeExpression(j.Log.Stream, jobEvalCtx, &stream); diags.HasErrors() {
 						app.PrintDiags(diags)
 						return nil, diags
 					}
@@ -591,19 +593,19 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			}
 		}
 
-		conf, err := app.getConfigs(jobCtx, cc, j, "config", func(j JobSpec) []Config { return j.Configs }, nil)
+		conf, err := app.getConfigs(jobEvalCtx, cc, j, "config", func(j JobSpec) []Config { return j.Configs }, nil)
 		if err != nil {
 			return nil, err
 		}
 
-		jobCtx.Variables["conf"] = conf
+		jobEvalCtx.Variables["conf"] = conf
 
 		secretRefsEvaluator, err := vals.New(vals.Options{CacheSize: 100})
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize vals: %v", err)
 		}
 
-		sec, err := app.getConfigs(jobCtx, cc, j, "secret", func(j JobSpec) []Config { return j.Secrets }, func(m map[string]interface{}) (map[string]interface{}, error) {
+		sec, err := app.getConfigs(jobEvalCtx, cc, j, "secret", func(j JobSpec) []Config { return j.Secrets }, func(m map[string]interface{}) (map[string]interface{}, error) {
 			return secretRefsEvaluator.Eval(m)
 		})
 
@@ -611,14 +613,14 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			return nil, err
 		}
 
-		jobCtx.Variables["sec"] = sec
+		jobEvalCtx.Variables["sec"] = sec
 
 		needs := map[string]cty.Value{}
 
 		var concurrency int
 
 		if !IsExpressionEmpty(j.Concurrency) {
-			if err := gohcl2.DecodeExpression(j.Concurrency, jobCtx, &concurrency); err != nil {
+			if err := gohcl2.DecodeExpression(j.Concurrency, jobEvalCtx, &concurrency); err != nil {
 				app.PrintDiags(err)
 				return nil, err
 			}
@@ -786,7 +788,7 @@ func (app *App) sanitize(str string) string {
 	return str
 }
 
-func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Result, error) {
+func (app *App) execJob(l *EventLogger, j JobSpec, jobCtx *JobContext) (*Result, error) {
 	var res *Result
 
 	var err error
@@ -803,13 +805,15 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 
 	var lastDepRes *Result
 
+	evalCtx := jobCtx.evalContext
+
 	if j.Deps != nil {
 		for i := range j.Deps {
 			d := j.Deps[i]
 
 			var err error
 
-			lastDepRes, err = app.execMultiRun(l, ctx, &d)
+			lastDepRes, err = app.execMultiRun(l, evalCtx, &d)
 			if err != nil {
 				return nil, err
 			}
@@ -819,20 +823,20 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 	}
 
 	if j.Exec != nil {
-		if diags := gohcl2.DecodeExpression(j.Exec.Command, ctx, &cmd); diags.HasErrors() {
+		if diags := gohcl2.DecodeExpression(j.Exec.Command, evalCtx, &cmd); diags.HasErrors() {
 			return nil, diags
 		}
 
-		if diags := gohcl2.DecodeExpression(j.Exec.Args, ctx, &args); diags.HasErrors() {
+		if diags := gohcl2.DecodeExpression(j.Exec.Args, evalCtx, &args); diags.HasErrors() {
 			return nil, diags
 		}
 
-		if diags := gohcl2.DecodeExpression(j.Exec.Env, ctx, &env); diags.HasErrors() {
+		if diags := gohcl2.DecodeExpression(j.Exec.Env, evalCtx, &env); diags.HasErrors() {
 			return nil, diags
 		}
 
 		if !IsExpressionEmpty(j.Exec.Dir) {
-			if diags := gohcl2.DecodeExpression(j.Exec.Dir, ctx, &dir); diags.HasErrors() {
+			if diags := gohcl2.DecodeExpression(j.Exec.Dir, evalCtx, &dir); diags.HasErrors() {
 				return nil, diags
 			}
 		}
@@ -859,10 +863,10 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 
 		var lazyStaticRun LazyStaticRun
 
-		sErr := gohcl2.DecodeBody(j.Body, ctx, &lazyStaticRun)
+		sErr := gohcl2.DecodeBody(j.Body, evalCtx, &lazyStaticRun)
 
 		if sErr.HasErrors() {
-			dErr := gohcl2.DecodeBody(j.Body, ctx, &lazyDynamicRun)
+			dErr := gohcl2.DecodeBody(j.Body, evalCtx, &lazyDynamicRun)
 
 			if dErr != nil {
 				sErrMsg := sErr.Error()
@@ -882,10 +886,10 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 		}
 
 		if either.static != nil || either.dynamic != nil {
-			res, err = app.runJobAndUpdateContext(l, ctx, either, new(sync.Mutex))
+			res, err = app.runJobAndUpdateContext(l, jobCtx, either, new(sync.Mutex))
 		} else if j.Assert != nil {
 			for _, a := range j.Assert {
-				if err2 := app.execAssert(ctx, a); err2 != nil {
+				if err2 := app.execAssert(evalCtx, a); err2 != nil {
 					return nil, err2
 				}
 			}
@@ -895,7 +899,7 @@ func (app *App) execJob(l *EventLogger, j JobSpec, ctx *hcl2.EvalContext) (*Resu
 
 	if j.Assert != nil && len(j.Assert) > 0 {
 		for _, a := range j.Assert {
-			if err2 := app.execAssert(ctx, a); err2 != nil {
+			if err2 := app.execAssert(evalCtx, a); err2 != nil {
 				return nil, err2
 			}
 		}
@@ -1068,7 +1072,12 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 	caseVal := cty.ObjectVal(caseFields)
 	ctx.Variables["case"] = caseVal
 
-	res, err := app.runJobAndUpdateContext(nil, ctx, eitherJobRun{static: &t.Run}, new(sync.Mutex))
+	jobCtx := &JobContext{
+		evalContext: ctx,
+		globalArgs:  map[string]interface{}{},
+	}
+
+	res, err := app.runJobAndUpdateContext(nil, jobCtx, eitherJobRun{static: &t.Run}, new(sync.Mutex))
 
 	if res == nil && err != nil {
 		return nil, err
@@ -1123,7 +1132,7 @@ func (res *Result) toCty() cty.Value {
 	})
 }
 
-func (app *App) execRunInternal(l *EventLogger, jobCtx *hcl2.EvalContext, run eitherJobRun) (*Result, error) {
+func (app *App) execRunInternal(l *EventLogger, jobCtx *JobContext, run eitherJobRun) (*Result, error) {
 	var jobRun *jobRun
 
 	var err error
@@ -1260,36 +1269,7 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *hcl2.EvalContext, r *Depend
 	return res, nil
 }
 
-func exprToGoMap(ctx *hcl2.EvalContext, expr hcl2.Expression) (map[string]interface{}, error) {
-	args := map[string]interface{}{}
-
-	// We need to explicitly specify that the type of values is DynamicPseudoType.
-	//
-	// Otherwise, for e.g. map[string]cty.Value{], DecodeExpression computes the lowest common type for all the values.
-	// That is, {"foo":true,"bar":"BAR"} would produce cty.Map(cty.String) = map[string]string,
-	// rather than cty.Map(DynamicPseudoType) = map[string]interface{}.
-	m := cty.MapValEmpty(cty.DynamicPseudoType)
-
-	if err := gohcl2.DecodeExpression(expr, ctx, &m); err != nil {
-		return nil, err
-	}
-
-	ctyArgs := m.AsValueMap()
-
-	for k, v := range ctyArgs {
-		var err error
-
-		args[k], err = ctyToGo(v)
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return args, nil
-}
-
-func (app *App) runJobAndUpdateContext(l *EventLogger, jobCtx *hcl2.EvalContext, run eitherJobRun, m sync.Locker) (*Result, error) {
+func (app *App) runJobAndUpdateContext(l *EventLogger, jobCtx *JobContext, run eitherJobRun, m sync.Locker) (*Result, error) {
 	res, err := app.execRunInternal(l, jobCtx, run)
 
 	if res == nil {
@@ -1309,146 +1289,23 @@ func (app *App) runJobAndUpdateContext(l *EventLogger, jobCtx *hcl2.EvalContext,
 	}
 
 	runVal := cty.ObjectVal(runFields)
-	jobCtx.Variables["run"] = runVal
+	jobCtx.evalContext.Variables["run"] = runVal
 
 	return res, err
 }
 
-func ctyToGo(v cty.Value) (interface{}, error) {
-	var vv interface{}
-
-	switch tpe := v.Type(); tpe {
-	case cty.String:
-		var vvv string
-
-		if err := gocty.FromCtyValue(v, &vvv); err != nil {
-			return nil, err
-		}
-
-		vv = vvv
-	case cty.Number:
-		var vvv int
-
-		if err := gocty.FromCtyValue(v, &vvv); err != nil {
-			return nil, err
-		}
-
-		vv = vvv
-	case cty.Bool:
-		var vvv bool
-
-		if err := gocty.FromCtyValue(v, &vvv); err != nil {
-			return nil, err
-		}
-
-		vv = vvv
-	case cty.List(cty.String):
-		var vvv []string
-
-		if err := gocty.FromCtyValue(v, &vvv); err != nil {
-			return nil, err
-		}
-
-		vv = vvv
-	case cty.List(cty.Number):
-		var vvv []int
-
-		if err := gocty.FromCtyValue(v, &vvv); err != nil {
-			return nil, err
-		}
-
-		vv = vvv
-	case cty.Map(cty.String):
-		m := map[string]string{}
-
-		if err := gocty.FromCtyValue(v, &v); err != nil {
-			return nil, err
-		}
-
-		vv = m
-	default:
-		if tpe.IsTupleType() {
-			var elemTpe *cty.Type
-
-			elemTypes := tpe.TupleElementTypes()
-
-			for i := range elemTypes {
-				t := &elemTypes[i]
-
-				if elemTpe == nil {
-					elemTpe = t
-				} else if !elemTpe.Equals(*t) {
-					return nil, fmt.Errorf("handler for tuple with varying element types is not implemented yet: %v", v)
-				}
-			}
-
-			if elemTpe == nil {
-				vv = []interface{}{}
-			} else {
-				switch *elemTpe {
-				case cty.String:
-					var vvv []string
-
-					for i := range elemTypes {
-						var s string
-
-						if err := gocty.FromCtyValue(v.Index(cty.NumberIntVal(int64(i))), &s); err != nil {
-							return nil, err
-						}
-
-						vvv = append(vvv, s)
-					}
-
-					vv = vvv
-				case cty.Number:
-					var vvv []int
-
-					for i := range elemTypes {
-						var s int
-
-						if err := gocty.FromCtyValue(v.Index(cty.NumberIntVal(int64(i))), &s); err != nil {
-							return nil, err
-						}
-
-						vvv = append(vvv, s)
-					}
-
-					vv = vvv
-				default:
-					return nil, fmt.Errorf("handler for tuple with element type of %s is not implemented yet: %v", *elemTpe, v)
-				}
-			}
-		} else if tpe.IsObjectType() {
-			m := map[string]interface{}{}
-
-			for name := range tpe.AttributeTypes() {
-				attr := v.GetAttr(name)
-
-				v, err := ctyToGo(attr)
-				if err != nil {
-					return nil, fmt.Errorf("unable to decoode attribute %q of object: %w", name, err)
-				}
-				m[name] = v
-			}
-
-			vv = m
-		} else {
-			return nil, fmt.Errorf("handler for type %s not implemented yet", v.Type().FriendlyName())
-		}
-	}
-
-	return vv, nil
-}
-
-func (app *App) execJobSteps(l *EventLogger, jobCtx *hcl2.EvalContext, results map[string]cty.Value, steps []Step, concurrency int) (*Result, error) {
-	hclCtx := *jobCtx
+func (app *App) execJobSteps(l *EventLogger, jobCtx *JobContext, results map[string]cty.Value, steps []Step, concurrency int) (*Result, error) {
+	stepEvalCtx := *jobCtx.evalContext
 
 	vars := map[string]cty.Value{}
-	for k, v := range jobCtx.Variables {
+	for k, v := range stepEvalCtx.Variables {
 		vars[k] = v
 	}
 
-	hclCtx.Variables = vars
+	stepEvalCtx.Variables = vars
+
+	stepCtx := *jobCtx
+	stepCtx.evalContext = &stepEvalCtx
 
 	m := new(sync.Mutex)
 
@@ -1465,7 +1322,7 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *hcl2.EvalContext, results m
 		s := steps[i]
 
 		f := func() (*Result, error) {
-			res, err := app.runJobAndUpdateContext(l, &hclCtx, eitherJobRun{static: &s.Run}, m)
+			res, err := app.runJobAndUpdateContext(l, &stepCtx, eitherJobRun{static: &s.Run}, m)
 			if err != nil {
 				return res, err
 			}
@@ -1474,7 +1331,7 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *hcl2.EvalContext, results m
 
 			results[s.Name] = res.toCty()
 			resultsCty := cty.ObjectVal(results)
-			hclCtx.Variables["step"] = resultsCty
+			stepEvalCtx.Variables["step"] = resultsCty
 
 			m.Unlock()
 
@@ -1700,54 +1557,66 @@ func getValueFor(ctx cty.Value, name string, typeExpr hcl2.Expression, defaultEx
 	return &val, &tpe, nil
 }
 
-func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interface{}, givenOpts map[string]interface{}, f SetOptsFunc) (*hcl2.EvalContext, error) {
+type JobContext struct {
+	evalContext *hcl2.EvalContext
+
+	globalArgs map[string]interface{}
+}
+
+func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interface{}, givenOpts map[string]interface{}, f SetOptsFunc) (*JobContext, error) {
 	ctx := getContext(j.SourceLocator)
+
+	globalParams, err := setParameterValues("global parameter", ctx, cc.Parameters, givenParams)
+	if err != nil {
+		return nil, fmt.Errorf("job %q: %w", j.Name, err)
+	}
+
+	localParams, err := setParameterValues("parameter", ctx, j.Parameters, givenParams)
+	if err != nil {
+		return nil, fmt.Errorf("job %q: %w", j.Name, err)
+	}
 
 	params := map[string]cty.Value{}
 
-	paramSpecs := append(append([]Parameter{}, cc.Parameters...), j.Parameters...)
-	for _, p := range paramSpecs {
-		v, _, err := getValueFor(ctx, p.Name, p.Type, p.Default, givenParams)
-		if err != nil {
-			return nil, fmt.Errorf("job %q: parameter %q: %w", j.Name, p.Name, err)
-		}
+	for k, v := range globalParams {
+		params[k] = v
+	}
 
-		if v == nil {
-			return nil, fmt.Errorf("job %q: parameter %q: missing value", j.Name, p.Name)
-		}
+	// In case this is not a default/root job, we have a separate set of parameters to override the globals. So:
+	if j.Name != "" {
+		for k, v := range localParams {
+			if _, ok := params[k]; ok {
+				return nil, fmt.Errorf("job %q: shadowing global parameter %q with parameter %q is not allowed", j.Name, k, k)
+			}
 
-		params[p.Name] = *v
+			params[k] = v
+		}
+	}
+
+	globalOpts, err := setOptionValues("global option", ctx, cc.Options, givenOpts, f)
+	if err != nil {
+		return nil, fmt.Errorf("job %q: %w", j.Name, err)
+	}
+
+	localOpts, err := setOptionValues("option", ctx, j.Options, givenOpts, f)
+	if err != nil {
+		return nil, fmt.Errorf("job %q: %w", j.Name, err)
 	}
 
 	opts := map[string]cty.Value{}
 
-	var pendingOptions []PendingOption
-
-	optSpecs := append(append([]OptionSpec{}, cc.Options...), j.Options...)
-	for _, op := range optSpecs {
-		v, tpe, err := getValueFor(ctx, op.Name, op.Type, op.Default, givenOpts)
-		if err != nil {
-			return nil, fmt.Errorf("job %q: option %q: %w", j.Name, op.Name, err)
-		}
-
-		if v == nil {
-			if f != nil {
-				opCopy := op
-
-				pendingOptions = append(pendingOptions, PendingOption{Spec: opCopy, Type: *tpe})
-			} else {
-				return nil, fmt.Errorf("job %q: parameter %q: missing value", j.Name, op.Name)
-			}
-
-			continue
-		}
-
-		opts[op.Name] = *v
+	for k, v := range globalOpts {
+		opts[k] = v
 	}
 
-	if len(pendingOptions) > 0 {
-		if err := f(opts, pendingOptions); err != nil {
-			return nil, fmt.Errorf("job %q: %w", j.Name, err)
+	// In case this is not a default/root job, we have a separate set of options to override the globals. So:
+	if j.Name != "" {
+		for k, v := range localOpts {
+			if _, ok := opts[k]; ok {
+				return nil, fmt.Errorf("job %q: shadowing global option %q with option %q is not allowed", j.Name, k, k)
+			}
+
+			opts[k] = v
 		}
 	}
 
@@ -1773,7 +1642,34 @@ func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[stri
 
 	jobCtx.Variables["mod"] = mod
 
-	return jobCtx, nil
+	globalArgs := map[string]interface{}{}
+
+	for k, p := range globalParams {
+		v, err := ctyToGo(p)
+		if err != nil {
+			return nil, fmt.Errorf("converting global parameter %q to go: %w", k, err)
+		}
+
+		globalArgs[k] = v
+	}
+
+	for k, o := range globalOpts {
+		if _, ok := globalArgs[k]; ok {
+			return nil, fmt.Errorf("shadowing parameter %q with option %q is not allowed", k, k)
+		}
+
+		v, err := ctyToGo(o)
+		if err != nil {
+			return nil, fmt.Errorf("converting global option %q to go: %w", k, err)
+		}
+
+		globalArgs[k] = v
+	}
+
+	return &JobContext{
+		evalContext: jobCtx,
+		globalArgs:  globalArgs,
+	}, nil
 }
 
 func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec, confType string, f func(JobSpec) []Config, g func(map[string]interface{}) (map[string]interface{}, error)) (cty.Value, error) {
@@ -1823,21 +1719,9 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 					return cty.NilVal, err
 				}
 
-				ctyArgs := map[string]cty.Value{}
-
-				if err := gohcl2.DecodeExpression(source.Args, confCtx, &ctyArgs); err != nil {
+				args, err := exprToGoMap(confCtx, source.Args)
+				if err != nil {
 					return cty.NilVal, err
-				}
-
-				args := map[string]interface{}{}
-
-				for k, v := range ctyArgs {
-					vv, err := ctyToGo(v)
-					if err != nil {
-						return cty.NilVal, err
-					}
-
-					args[k] = vv
 				}
 
 				res, err := app.run(nil, source.Name, args, args)

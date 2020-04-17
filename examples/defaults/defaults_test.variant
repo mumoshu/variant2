@@ -15,13 +15,17 @@ emptymap.foo=FOO
 
 sometuple.0=x
 sometuple.1=1
+sometuple.2=true
 sometuple[0]=x
 sometuple[1]=1
+sometuple[2]=true
 
 someobj.foo=FOO
 someobj.bar=1
+someobj.baz=true
 someobj["foo"]=FOO
 someobj["bar"]=1
+someobj["baz"]=true
 EOS
     )
     exitstatus = 0
