@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+
 	"github.com/hashicorp/hcl/v2"
 	"github.com/zclconf/go-cty/cty"
 )
@@ -70,7 +71,6 @@ func setParameterValues(subject string, ctx cty.Value, specs []Parameter, overri
 	return values, nil
 }
 
-
 func setOptionValues(subject string, ctx cty.Value, specs []OptionSpec, overrides map[string]interface{}, f SetOptsFunc) (map[string]cty.Value, error) {
 	values := map[string]cty.Value{}
 
@@ -93,4 +93,3 @@ func setOptionValues(subject string, ctx cty.Value, specs []OptionSpec, override
 
 	return values, nil
 }
-

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/zclconf/go-cty/cty"
@@ -117,84 +118,19 @@ func ctyToGo(v cty.Value) (interface{}, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			m[k] = v
 		}
 
 		vv = m
 	default:
 		if tpe.IsTupleType() {
-			elemTypes := tpe.TupleElementTypes()
-
-			if len(elemTypes) == 0 {
-				vv = []interface{}{}
-			} else {
-				var lastElemType *cty.Type
-
-				var typeVaries bool
-
-				for i := range elemTypes {
-					t := &elemTypes[i]
-
-					if lastElemType == nil {
-						lastElemType = t
-					} else if !lastElemType.Equals(*t) {
-						//return nil, fmt.Errorf("handler for tuple with varying element types is not implemented yet: %v", v)
-						typeVaries = true
-						break
-					}
-				}
-
-				if typeVaries {
-					var elems []interface{}
-
-					iter := v.ElementIterator()
-
-					for iter.Next() {
-						_, elemValue := iter.Element()
-						elemGo, err := ctyToGo(elemValue)
-						if err != nil {
-							return nil, err
-						}
-
-						elems = append(elems, elemGo)
-					}
-
-					vv = elems
-				} else {
-					switch *lastElemType {
-					case cty.String:
-						var vvv []string
-
-						for i := range elemTypes {
-							var s string
-
-							if err := gocty.FromCtyValue(v.Index(cty.NumberIntVal(int64(i))), &s); err != nil {
-								return nil, err
-							}
-
-							vvv = append(vvv, s)
-						}
-
-						vv = vvv
-					case cty.Number:
-						var vvv []int
-
-						for i := range elemTypes {
-							var s int
-
-							if err := gocty.FromCtyValue(v.Index(cty.NumberIntVal(int64(i))), &s); err != nil {
-								return nil, err
-							}
-
-							vvv = append(vvv, s)
-						}
-
-						vv = vvv
-					default:
-						return nil, fmt.Errorf("handler for tuple with element type of %s is not implemented yet: %v", *lastElemType, v)
-					}
-				}
+			a, err := ctyTupleToGo(v)
+			if err != nil {
+				return nil, err
 			}
+
+			vv = a
 		} else if tpe.IsObjectType() {
 			m := map[string]interface{}{}
 
@@ -217,3 +153,84 @@ func ctyToGo(v cty.Value) (interface{}, error) {
 	return vv, nil
 }
 
+func ctyTupleToGo(tuple cty.Value) (interface{}, error) {
+	tpe := tuple.Type()
+
+	elemTypes := tpe.TupleElementTypes()
+
+	if len(elemTypes) == 0 {
+		return []interface{}{}, nil
+	}
+
+	var lastElemType *cty.Type
+
+	var typeVaries bool
+
+	for i := range elemTypes {
+		t := &elemTypes[i]
+
+		if lastElemType == nil {
+			lastElemType = t
+		} else if !lastElemType.Equals(*t) {
+			//return nil, fmt.Errorf("handler for tuple with varying element types is not implemented yet: %v", v)
+			typeVaries = true
+			break
+		}
+	}
+
+	if typeVaries {
+		var elems []interface{}
+
+		iter := tuple.ElementIterator()
+
+		for iter.Next() {
+			_, elemValue := iter.Element()
+
+			elemGo, err := ctyToGo(elemValue)
+			if err != nil {
+				return nil, err
+			}
+
+			elems = append(elems, elemGo)
+		}
+
+		return elems, nil
+	}
+
+	var nonEmptyGoSlice interface{}
+
+	switch *lastElemType {
+	case cty.String:
+		var strSlice []string
+
+		for i := range elemTypes {
+			var elem string
+
+			if err := gocty.FromCtyValue(tuple.Index(cty.NumberIntVal(int64(i))), &elem); err != nil {
+				return nil, err
+			}
+
+			strSlice = append(strSlice, elem)
+		}
+
+		nonEmptyGoSlice = strSlice
+	case cty.Number:
+		var intSlice []int
+
+		for i := range elemTypes {
+			var elem int
+
+			if err := gocty.FromCtyValue(tuple.Index(cty.NumberIntVal(int64(i))), &elem); err != nil {
+				return nil, err
+			}
+
+			intSlice = append(intSlice, elem)
+		}
+
+		nonEmptyGoSlice = intSlice
+	default:
+		return nil, fmt.Errorf("handler for tuple with element type of %s is not implemented yet: %v", *lastElemType, tuple)
+	}
+
+	return nonEmptyGoSlice, nil
+}
