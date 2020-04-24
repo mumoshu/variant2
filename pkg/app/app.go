@@ -1053,11 +1053,6 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 		},
 	}
 
-	ctx, err := addVariables(ctx, t.Variables)
-	if err != nil {
-		return nil, err
-	}
-
 	caseFields := map[string]cty.Value{}
 
 	for k, expr := range c.Args {
@@ -1071,6 +1066,11 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 
 	caseVal := cty.ObjectVal(caseFields)
 	ctx.Variables["case"] = caseVal
+
+	ctx, err := addVariables(ctx, t.Variables)
+	if err != nil {
+		return nil, err
+	}
 
 	jobCtx := &JobContext{
 		evalContext: ctx,
