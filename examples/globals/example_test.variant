@@ -3,10 +3,17 @@ test "example" {
     out = <<EOS
 sub:global_param=A
 sub:global_opt=B
+sub:global_opt_override=true
+sub:param1=F
+
+sub:global_param=A
+sub:global_opt=B
+sub:global_opt_override=true
 sub:param1=E
 
 example:global_param=A
 example:global_opt=B
+example:global_opt_override=true
 example:local_param=C
 example:local_opt=D
 EOS
@@ -14,6 +21,7 @@ EOS
   }
 
   run "example" {
+    global_opt_override = true
   }
 
   assert "out" {

@@ -8,6 +8,11 @@ option "global_opt" {
   default = "B"
 }
 
+option "global_opt_override" {
+  type = bool
+  default = false
+}
+
 job "example" {
   parameter "local_param" {
     type = string
@@ -17,6 +22,12 @@ job "example" {
   option "local_opt" {
     type = string
     default = "D"
+  }
+
+  depends_on "sub" {
+    args = {
+      param1 = "F"
+    }
   }
 
   step "call sub" {
@@ -30,6 +41,7 @@ job "example" {
       text = <<EOS
 example:global_param=${param.global_param}
 example:global_opt=${opt.global_opt}
+example:global_opt_override=${opt.global_opt_override}
 example:local_param=${param.local_param}
 example:local_opt=${opt.local_opt}
 EOS
@@ -48,6 +60,7 @@ job "sub" {
       text = <<EOS
 sub:global_param=${param.global_param}
 sub:global_opt=${opt.global_opt}
+sub:global_opt_override=${opt.global_opt_override}
 sub:param1=${param.param1}
 EOS
     }

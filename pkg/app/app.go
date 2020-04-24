@@ -632,22 +632,64 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			concurrency = 1
 		}
 
+		var depStdout string
+
+		var lastDepRes *Result
+
 		{
-			res, err := app.execJobSteps(l, jobCtx, needs, j.Steps, concurrency)
-			if res != nil || err != nil {
-				app.PrintDiags(err)
-				return res, err
+			if j.Deps != nil {
+				for i := range j.Deps {
+					d := j.Deps[i]
+
+					var err error
+
+					lastDepRes, err = app.execMultiRun(l, jobCtx, &d)
+					if err != nil {
+						return nil, err
+					}
+
+					depStdout += lastDepRes.Stdout
+				}
 			}
 		}
 
-		{
-			r, err := app.execJob(l, j, jobCtx)
-			if r == nil && err == nil {
-				return nil, fmt.Errorf(NoRunMessage)
-			}
+		r, err := app.execJobSteps(l, jobCtx, needs, j.Steps, concurrency)
+		if err != nil {
 			app.PrintDiags(err)
 			return r, err
 		}
+
+		if r == nil {
+			jobRes, err := app.execJob(l, j, jobCtx)
+			if err != nil {
+				app.PrintDiags(err)
+				return jobRes, err
+			}
+
+			r = jobRes
+		}
+
+		if r == nil {
+			// The job contained only `depends_on` block(s)
+			// Treat the result of depends_on as the result of this job
+			if lastDepRes != nil {
+				lastDepRes.Stdout = depStdout
+
+				return lastDepRes, nil
+			}
+
+			if err == nil {
+				return nil, fmt.Errorf(NoRunMessage)
+			}
+		} else {
+			// The job contained job or step(s).
+			// If we also had depends_on block(s), concat all the results
+			r.Stdout = depStdout + r.Stdout
+		}
+
+		app.PrintDiags(err)
+
+		return r, err
 	}, nil
 }
 
@@ -801,26 +843,7 @@ func (app *App) execJob(l *EventLogger, j JobSpec, jobCtx *JobContext) (*Result,
 
 	var dir string
 
-	var depStdout string
-
-	var lastDepRes *Result
-
 	evalCtx := jobCtx.evalContext
-
-	if j.Deps != nil {
-		for i := range j.Deps {
-			d := j.Deps[i]
-
-			var err error
-
-			lastDepRes, err = app.execMultiRun(l, evalCtx, &d)
-			if err != nil {
-				return nil, err
-			}
-
-			depStdout += lastDepRes.Stdout
-		}
-	}
 
 	if j.Exec != nil {
 		if diags := gohcl2.DecodeExpression(j.Exec.Command, evalCtx, &cmd); diags.HasErrors() {
@@ -903,25 +926,6 @@ func (app *App) execJob(l *EventLogger, j JobSpec, jobCtx *JobContext) (*Result,
 				return nil, err2
 			}
 		}
-	}
-
-	if res == nil {
-		// The job contained only `depends_on` block(s)
-		// Treat the result of depends_on as the result of this job
-		if lastDepRes != nil {
-			lastDepRes.Stdout = depStdout
-
-			return lastDepRes, nil
-		}
-
-		// The job had no operation
-		return res, nil
-	}
-
-	// The job contained job or step(s).
-	// If we also had depends_on block(s), concat all the results
-	if depStdout != "" {
-		res.Stdout = depStdout + res.Stdout
 	}
 
 	return res, err
@@ -1088,7 +1092,7 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 		var lines []string
 
 		for _, a := range t.Assert {
-			if err := app.execAssert(ctx, a); err != nil {
+			if err := app.execAssert(jobCtx.evalContext, a); err != nil {
 				if strings.HasPrefix(err.Error(), "assertion \"") {
 					return nil, fmt.Errorf("case %q: %v", c.Name, err)
 				}
@@ -1182,15 +1186,15 @@ func cloneEvalContext(c *hcl2.EvalContext) *hcl2.EvalContext {
 	return &ctx
 }
 
-func (app *App) execMultiRun(l *EventLogger, jobCtx *hcl2.EvalContext, r *DependsOn) (*Result, error) {
-	ctx := cloneEvalContext(jobCtx)
+func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn) (*Result, error) {
+	ctx := cloneEvalContext(jobCtx.evalContext)
 
 	ctyItems := []cty.Value{}
 
 	items := []interface{}{}
 
 	if !IsExpressionEmpty(r.Items) {
-		if err := gohcl2.DecodeExpression(r.Items, jobCtx, &ctyItems); err != nil {
+		if err := gohcl2.DecodeExpression(r.Items, jobCtx.evalContext, &ctyItems); err != nil {
 			return nil, err
 		}
 
@@ -1218,10 +1222,20 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *hcl2.EvalContext, r *Depend
 
 			iterCtx.Variables["item"] = v
 
-			args, err := exprToGoMap(iterCtx, r.Args)
+			localArgs, err := exprToGoMap(iterCtx, r.Args)
 
 			if err != nil {
 				return nil, err
+			}
+
+			args := map[string]interface{}{}
+
+			for k, v := range jobCtx.globalArgs {
+				args[k] = v
+			}
+
+			for k, v := range localArgs {
+				args[k] = v
 			}
 
 			res, err := app.execRunArgs(l, r.Name, args)
@@ -1241,22 +1255,20 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *hcl2.EvalContext, r *Depend
 		}, nil
 	}
 
-	args := map[string]interface{}{}
+	localArgs, err := exprToGoMap(ctx, r.Args)
 
-	ctyArgs := map[string]cty.Value{}
-
-	if err := gohcl2.DecodeExpression(r.Args, ctx, &ctyArgs); err != nil {
+	if err != nil {
 		return nil, err
 	}
 
-	for k, v := range ctyArgs {
-		var err error
+	args := map[string]interface{}{}
 
-		args[k], err = ctyToGo(v)
+	for k, v := range jobCtx.globalArgs {
+		args[k] = v
+	}
 
-		if err != nil {
-			return nil, err
-		}
+	for k, v := range localArgs {
+		args[k] = v
 	}
 
 	res, err := app.execRunArgs(l, r.Name, args)
