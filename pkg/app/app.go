@@ -57,8 +57,14 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 	return jr()
 }
 
-func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}, streamOutput bool) (*Result, error) {
-	jr, err := app.Job(l, cmd, args, opts, nil, streamOutput)
+func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, streamOutput bool) (*Result, error) {
+	if l != nil {
+		if err := l.LogRun(cmd, args); err != nil {
+			return nil, err
+		}
+	}
+
+	jr, err := app.Job(l, cmd, args, args, nil, streamOutput)
 	if err != nil {
 		return nil, err
 	}
@@ -732,7 +738,7 @@ func (res *Result) toCty() cty.Value {
 	})
 }
 
-func (app *App) execRunInternal(l *EventLogger, jobCtx *JobContext, run eitherJobRun, streamOutput bool) (*Result, error) {
+func (app *App) dispatchRunJob(l *EventLogger, jobCtx *JobContext, run eitherJobRun, streamOutput bool) (*Result, error) {
 	var jobRun *jobRun
 
 	var err error
@@ -751,17 +757,7 @@ func (app *App) execRunInternal(l *EventLogger, jobCtx *JobContext, run eitherJo
 		}
 	}
 
-	return app.execRunArgs(l, jobRun.Name, jobRun.Args, streamOutput)
-}
-
-func (app *App) execRunArgs(l *EventLogger, name string, args map[string]interface{}, streamOutput bool) (*Result, error) {
-	if l != nil {
-		if err := l.LogRun(name, args); err != nil {
-			return nil, err
-		}
-	}
-
-	return app.run(l, name, args, args, streamOutput)
+	return app.run(l, jobRun.Name, jobRun.Args, streamOutput)
 }
 
 func cloneEvalContext(c *hcl2.EvalContext) *hcl2.EvalContext {
@@ -783,7 +779,7 @@ func cloneEvalContext(c *hcl2.EvalContext) *hcl2.EvalContext {
 }
 
 func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn, streamOutput bool) (*Result, error) {
-	ctx := cloneEvalContext(jobCtx.evalContext)
+	ctx := jobCtx.evalContext
 
 	ctyItems := []cty.Value{}
 
@@ -818,23 +814,14 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn, s
 
 			iterCtx.Variables["item"] = v
 
-			localArgs, err := exprToGoMap(iterCtx, r.Args)
+			jobCtx.evalContext = iterCtx
 
+			args, err := buildArgsFromExpr(jobCtx.WithEvalContext(iterCtx).Ptr(), r.Args)
 			if err != nil {
 				return nil, err
 			}
 
-			args := map[string]interface{}{}
-
-			for k, v := range jobCtx.globalArgs {
-				args[k] = v
-			}
-
-			for k, v := range localArgs {
-				args[k] = v
-			}
-
-			res, err := app.execRunArgs(l, r.Name, args, streamOutput)
+			res, err := app.run(l, r.Name, args, streamOutput)
 
 			if err != nil {
 				return res, err
@@ -851,23 +838,12 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn, s
 		}, nil
 	}
 
-	localArgs, err := exprToGoMap(ctx, r.Args)
-
+	args, err := buildArgsFromExpr(jobCtx, r.Args)
 	if err != nil {
 		return nil, err
 	}
 
-	args := map[string]interface{}{}
-
-	for k, v := range jobCtx.globalArgs {
-		args[k] = v
-	}
-
-	for k, v := range localArgs {
-		args[k] = v
-	}
-
-	res, err := app.execRunArgs(l, r.Name, args, streamOutput)
+	res, err := app.run(l, r.Name, args, streamOutput)
 	if err != nil {
 		return res, err
 	}
@@ -878,7 +854,7 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn, s
 }
 
 func (app *App) runJobAndUpdateContext(l *EventLogger, jobCtx *JobContext, run eitherJobRun, m sync.Locker, streamOutput bool) (*Result, error) {
-	res, err := app.execRunInternal(l, jobCtx, run, streamOutput)
+	res, err := app.dispatchRunJob(l, jobCtx, run, streamOutput)
 
 	if res == nil {
 		res = &Result{ExitStatus: 1, Stderr: err.Error()}
@@ -1171,6 +1147,17 @@ type JobContext struct {
 	globalArgs map[string]interface{}
 }
 
+func (c *JobContext) WithEvalContext(evalCtx *hcl2.EvalContext) JobContext {
+	return JobContext{
+		evalContext: evalCtx,
+		globalArgs:  c.globalArgs,
+	}
+}
+
+func (c JobContext) Ptr() *JobContext {
+	return &c
+}
+
 func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[string]interface{}, givenOpts map[string]interface{}, f SetOptsFunc) (*JobContext, error) {
 	ctx := getContext(j.SourceLocator)
 
@@ -1345,7 +1332,7 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 					args[k] = v
 				}
 
-				res, err := app.run(nil, source.Name, args, args, false)
+				res, err := app.run(nil, source.Name, args, false)
 				if err != nil {
 					return cty.NilVal, err
 				}

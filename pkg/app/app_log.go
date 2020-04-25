@@ -75,7 +75,7 @@ func (app *App) newLogCollector(file string, j JobSpec, jobCtx *JobContext) LogC
 			newJobCtx.evalContext = &evalCtx
 
 			for _, f := range j.Log.Forwards {
-				_, err := app.execRunInternal(nil, &newJobCtx, eitherJobRun{static: f.Run}, false)
+				_, err := app.dispatchRunJob(nil, &newJobCtx, eitherJobRun{static: f.Run}, false)
 				if err != nil {
 					return err
 				}
