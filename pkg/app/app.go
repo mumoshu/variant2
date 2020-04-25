@@ -3,8 +3,6 @@ package app
 import (
 	"flag"
 	"fmt"
-	"github.com/google/go-cmp/cmp"
-	"github.com/variantdev/vals"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -15,6 +13,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/variantdev/vals"
 
 	"github.com/kr/text"
 
@@ -277,14 +278,12 @@ func (app *App) execCmd(cmd Command, log bool) (*Result, error) {
 			return nil, fmt.Errorf("unexpected exec %d: expected command %q, got %q", app.execInvocationCount, expectation.Command, cmd.Name)
 		}
 
-		pad := strings.Repeat(" ", 2)
-
 		if diff := cmp.Diff(expectation.Args, cmd.Args); diff != "" {
-			return nil, fmt.Errorf("unexpected exec %d: expected args %v, got %v, diff:\n%s", app.execInvocationCount, expectation.Args, cmd.Args, pad+strings.Replace(diff, "\n", "\n"+pad, -1))
+			return nil, fmt.Errorf("unexpected exec %d: expected args %v, got %v", app.execInvocationCount, expectation.Args, cmd.Args)
 		}
 
 		if diff := cmp.Diff(expectation.Dir, cmd.Dir); diff != "" {
-			return nil, fmt.Errorf("unexpected exec %d: expected dir %q, got %q, diff:\n%s", app.execInvocationCount, expectation.Dir, cmd.Dir, pad+strings.Replace(diff, "\n", "\n"+pad, -1))
+			return nil, fmt.Errorf("unexpected exec %d: expected dir %q, got %q", app.execInvocationCount, expectation.Dir, cmd.Dir)
 		}
 
 		// Pop the successful command expectation so that on next execCmd call, we can
@@ -293,7 +292,7 @@ func (app *App) execCmd(cmd Command, log bool) (*Result, error) {
 
 		return &Result{Validated: true}, nil
 	} else if app.execInvocationCount > 0 {
-		return nil, fmt.Errorf("unexpected exec %d: fix the test by adding an expect block for this exec, or fix the test target: %v", app.execInvocationCount + 1, cmd)
+		return nil, fmt.Errorf("unexpected exec %d: fix the test by adding an expect block for this exec, or fix the test target: %v", app.execInvocationCount+1, cmd)
 	}
 
 	env := map[string]string{}
@@ -513,7 +512,7 @@ func (app *App) execAssert(ctx *hcl2.EvalContext, a Assert) error {
 			}
 		}
 
-		retErr := fmt.Errorf(`assertion %q failed: this expression must be true, but was false
+		msg := fmt.Sprintf(`
 
 EXPRESSION:
 
@@ -522,7 +521,9 @@ EXPRESSION:
 VARIABLES:
 
 %s
-`, a.Name, strings.TrimSpace(string(expr)), strings.Join(vars, "\n"))
+`, strings.TrimSpace(string(expr)), strings.Join(vars, "\n"))
+
+		retErr := fmt.Errorf(`assertion %q failed: this expression must be true, but was false%s`, a.Name, msg)
 
 		return retErr
 	}
@@ -747,18 +748,18 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 }
 
 type Result struct {
-	Stdout     string
-	Stderr     string
-	Undefined  bool
-	Skipped    bool
-	ExitStatus int
-
+	Stdout    string
+	Stderr    string
+	Undefined bool
+	Skipped   bool
 	// Cancelled is set to true when and only when the original command execution has been scheduled concurrently,
 	// but was cancelled before it was actually executed.
 	Cancelled bool
 
 	// Validated is set to true when and only when the command execution was successfully validated against the mock
 	Validated bool
+
+	ExitStatus int
 }
 
 func (res *Result) toCty() cty.Value {
