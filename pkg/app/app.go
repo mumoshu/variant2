@@ -505,7 +505,7 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 		f = fs[0]
 	}
 
-	jr, err := app.Job(nil, cmd, args, opts, f)
+	jr, err := app.Job(nil, cmd, args, opts, f, true)
 	if err != nil {
 		return nil, err
 	}
@@ -513,8 +513,8 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 	return jr()
 }
 
-func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}) (*Result, error) {
-	jr, err := app.Job(l, cmd, args, opts, nil)
+func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}, streamOutput bool) (*Result, error) {
+	jr, err := app.Job(l, cmd, args, opts, nil, streamOutput)
 	if err != nil {
 		return nil, err
 	}
@@ -522,7 +522,7 @@ func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, opt
 	return jr()
 }
 
-func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}, f SetOptsFunc) (func() (*Result, error), error) {
+func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}, f SetOptsFunc, streamOutput bool) (func() (*Result, error), error) {
 	jobByName := app.JobByName
 
 	j, ok := jobByName[cmd]
@@ -643,7 +643,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 
 					var err error
 
-					lastDepRes, err = app.execMultiRun(l, jobCtx, &d)
+					lastDepRes, err = app.execMultiRun(l, jobCtx, &d, streamOutput)
 					if err != nil {
 						return nil, err
 					}
@@ -653,14 +653,14 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			}
 		}
 
-		r, err := app.execJobSteps(l, jobCtx, needs, j.Steps, concurrency)
+		r, err := app.execJobSteps(l, jobCtx, needs, j.Steps, concurrency, streamOutput)
 		if err != nil {
 			app.PrintDiags(err)
 			return r, err
 		}
 
 		if r == nil {
-			jobRes, err := app.execJob(l, j, jobCtx)
+			jobRes, err := app.execJob(l, j, jobCtx, streamOutput)
 			if err != nil {
 				app.PrintDiags(err)
 				return jobRes, err
@@ -830,7 +830,7 @@ func (app *App) sanitize(str string) string {
 	return str
 }
 
-func (app *App) execJob(l *EventLogger, j JobSpec, jobCtx *JobContext) (*Result, error) {
+func (app *App) execJob(l *EventLogger, j JobSpec, jobCtx *JobContext, streamOutput bool) (*Result, error) {
 	var res *Result
 
 	var err error
@@ -875,7 +875,7 @@ func (app *App) execJob(l *EventLogger, j JobSpec, jobCtx *JobContext) (*Result,
 			c.Interactive = true
 		}
 
-		res, err = app.execCmd(c, true)
+		res, err = app.execCmd(c, streamOutput)
 		if err := l.LogExec(cmd, args); err != nil {
 			return nil, err
 		}
@@ -909,7 +909,7 @@ func (app *App) execJob(l *EventLogger, j JobSpec, jobCtx *JobContext) (*Result,
 		}
 
 		if either.static != nil || either.dynamic != nil {
-			res, err = app.runJobAndUpdateContext(l, jobCtx, either, new(sync.Mutex))
+			res, err = app.runJobAndUpdateContext(l, jobCtx, either, new(sync.Mutex), streamOutput)
 		} else if j.Assert != nil {
 			for _, a := range j.Assert {
 				if err2 := app.execAssert(evalCtx, a); err2 != nil {
@@ -1133,7 +1133,7 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 		globalArgs:  map[string]interface{}{},
 	}
 
-	res, err := app.runJobAndUpdateContext(nil, jobCtx, eitherJobRun{static: &t.Run}, new(sync.Mutex))
+	res, err := app.runJobAndUpdateContext(nil, jobCtx, eitherJobRun{static: &t.Run}, new(sync.Mutex), true)
 
 	if res == nil && err != nil {
 		return nil, err
@@ -1188,7 +1188,7 @@ func (res *Result) toCty() cty.Value {
 	})
 }
 
-func (app *App) execRunInternal(l *EventLogger, jobCtx *JobContext, run eitherJobRun) (*Result, error) {
+func (app *App) execRunInternal(l *EventLogger, jobCtx *JobContext, run eitherJobRun, streamOutput bool) (*Result, error) {
 	var jobRun *jobRun
 
 	var err error
@@ -1207,17 +1207,17 @@ func (app *App) execRunInternal(l *EventLogger, jobCtx *JobContext, run eitherJo
 		}
 	}
 
-	return app.execRunArgs(l, jobRun.Name, jobRun.Args)
+	return app.execRunArgs(l, jobRun.Name, jobRun.Args, streamOutput)
 }
 
-func (app *App) execRunArgs(l *EventLogger, name string, args map[string]interface{}) (*Result, error) {
+func (app *App) execRunArgs(l *EventLogger, name string, args map[string]interface{}, streamOutput bool) (*Result, error) {
 	if l != nil {
 		if err := l.LogRun(name, args); err != nil {
 			return nil, err
 		}
 	}
 
-	return app.run(l, name, args, args)
+	return app.run(l, name, args, args, streamOutput)
 }
 
 func cloneEvalContext(c *hcl2.EvalContext) *hcl2.EvalContext {
@@ -1238,7 +1238,7 @@ func cloneEvalContext(c *hcl2.EvalContext) *hcl2.EvalContext {
 	return &ctx
 }
 
-func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn) (*Result, error) {
+func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn, streamOutput bool) (*Result, error) {
 	ctx := cloneEvalContext(jobCtx.evalContext)
 
 	ctyItems := []cty.Value{}
@@ -1290,7 +1290,7 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn) (
 				args[k] = v
 			}
 
-			res, err := app.execRunArgs(l, r.Name, args)
+			res, err := app.execRunArgs(l, r.Name, args, streamOutput)
 
 			if err != nil {
 				return res, err
@@ -1323,7 +1323,7 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn) (
 		args[k] = v
 	}
 
-	res, err := app.execRunArgs(l, r.Name, args)
+	res, err := app.execRunArgs(l, r.Name, args, streamOutput)
 	if err != nil {
 		return res, err
 	}
@@ -1333,8 +1333,8 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn) (
 	return res, nil
 }
 
-func (app *App) runJobAndUpdateContext(l *EventLogger, jobCtx *JobContext, run eitherJobRun, m sync.Locker) (*Result, error) {
-	res, err := app.execRunInternal(l, jobCtx, run)
+func (app *App) runJobAndUpdateContext(l *EventLogger, jobCtx *JobContext, run eitherJobRun, m sync.Locker, streamOutput bool) (*Result, error) {
+	res, err := app.execRunInternal(l, jobCtx, run, streamOutput)
 
 	if res == nil {
 		res = &Result{ExitStatus: 1, Stderr: err.Error()}
@@ -1358,7 +1358,7 @@ func (app *App) runJobAndUpdateContext(l *EventLogger, jobCtx *JobContext, run e
 	return res, err
 }
 
-func (app *App) execJobSteps(l *EventLogger, jobCtx *JobContext, results map[string]cty.Value, steps []Step, concurrency int) (*Result, error) {
+func (app *App) execJobSteps(l *EventLogger, jobCtx *JobContext, results map[string]cty.Value, steps []Step, concurrency int, streamOutput bool) (*Result, error) {
 	stepEvalCtx := *jobCtx.evalContext
 
 	vars := map[string]cty.Value{}
@@ -1386,7 +1386,7 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *JobContext, results map[str
 		s := steps[i]
 
 		f := func() (*Result, error) {
-			res, err := app.runJobAndUpdateContext(l, &stepCtx, eitherJobRun{static: &s.Run}, m)
+			res, err := app.runJobAndUpdateContext(l, &stepCtx, eitherJobRun{static: &s.Run}, m, streamOutput)
 			if err != nil {
 				return res, err
 			}
@@ -1801,7 +1801,7 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 					args[k] = v
 				}
 
-				res, err := app.run(nil, source.Name, args, args)
+				res, err := app.run(nil, source.Name, args, args, false)
 				if err != nil {
 					return cty.NilVal, err
 				}
