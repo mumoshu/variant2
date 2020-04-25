@@ -1316,20 +1316,10 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 					return cty.NilVal, err
 				}
 
-				localArgs, err := exprToGoMap(confCtx, source.Args)
+				args, err := buildArgsFromExpr(jobCtx.WithEvalContext(confCtx).Ptr(), source.Args)
 
 				if err != nil {
 					return cty.NilVal, err
-				}
-
-				args := map[string]interface{}{}
-
-				for k, v := range jobCtx.globalArgs {
-					args[k] = v
-				}
-
-				for k, v := range localArgs {
-					args[k] = v
 				}
 
 				res, err := app.run(nil, source.Name, args, false)
