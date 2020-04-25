@@ -3,6 +3,7 @@ package app
 import (
 	"flag"
 	"fmt"
+	"github.com/google/go-cmp/cmp"
 	"github.com/variantdev/vals"
 	"io/ioutil"
 	"os"
@@ -265,6 +266,36 @@ type Command struct {
 }
 
 func (app *App) execCmd(cmd Command, log bool) (*Result, error) {
+	// If we have one ore more pending exec expectations, never run the actual command.
+	// Instead, do validate the execCmd run against the expectation.
+	if len(app.expectedExecs) > 0 {
+		app.execInvocationCount++
+
+		expectation := app.expectedExecs[0]
+
+		if cmd.Name != expectation.Command {
+			return nil, fmt.Errorf("unexpected exec %d: expected command %q, got %q", app.execInvocationCount, expectation.Command, cmd.Name)
+		}
+
+		pad := strings.Repeat(" ", 2)
+
+		if diff := cmp.Diff(expectation.Args, cmd.Args); diff != "" {
+			return nil, fmt.Errorf("unexpected exec %d: expected args %v, got %v, diff:\n%s", app.execInvocationCount, expectation.Args, cmd.Args, pad+strings.Replace(diff, "\n", "\n"+pad, -1))
+		}
+
+		if diff := cmp.Diff(expectation.Dir, cmd.Dir); diff != "" {
+			return nil, fmt.Errorf("unexpected exec %d: expected dir %q, got %q, diff:\n%s", app.execInvocationCount, expectation.Dir, cmd.Dir, pad+strings.Replace(diff, "\n", "\n"+pad, -1))
+		}
+
+		// Pop the successful command expectation so that on next execCmd call, we can
+		// use expectedExecs[0] as the next expectation to be checked.
+		app.expectedExecs = app.expectedExecs[1:]
+
+		return &Result{Validated: true}, nil
+	} else if app.execInvocationCount > 0 {
+		return nil, fmt.Errorf("unexpected exec %d: fix the test by adding an expect block for this exec, or fix the test target: %v", app.execInvocationCount + 1, cmd)
+	}
+
 	env := map[string]string{}
 
 	// We need to explicitly inherit os envvars.
@@ -477,11 +508,23 @@ func (app *App) execAssert(ctx *hcl2.EvalContext, a Assert) error {
 				}
 
 				src := strings.TrimSpace(string(b[t.SourceRange().Start.Byte:t.SourceRange().End.Byte]))
-				vars = append(vars, fmt.Sprintf("%s=%v (%T)", src, v, v))
+
+				vars = append(vars, fmt.Sprintf("%s (%T) =\n%v", src, v, v))
 			}
 		}
 
-		return fmt.Errorf("assertion %q failed: this expression must be true, but was false: %s, where %s", a.Name, expr, strings.Join(vars, " "))
+		retErr := fmt.Errorf(`assertion %q failed: this expression must be true, but was false
+
+EXPRESSION:
+
+%s
+
+VARIABLES:
+
+%s
+`, a.Name, strings.TrimSpace(string(expr)), strings.Join(vars, "\n"))
+
+		return retErr
 	}
 
 	return nil
@@ -545,7 +588,10 @@ func (app *App) execTest(t *testing.T, test Test) *Result {
 		c := cases[i]
 		t.Run(c.Name, func(t *testing.T) {
 			var err error
-			res, err = app.execTestCase(test, c)
+
+			testApp := app.ShallowCopy().Ptr()
+
+			res, err = testApp.execTestCase(test, c)
 			if err != nil {
 				app.PrintError(err)
 				t.Fatalf("%v", err)
@@ -640,6 +686,36 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 		globalArgs:  map[string]interface{}{},
 	}
 
+	app.expectedExecs = nil
+
+	for _, e := range t.ExpectedExecs {
+		var cmd string
+
+		if diags := gohcl2.DecodeExpression(e.Command, ctx, &cmd); diags.HasErrors() {
+			return nil, diags
+		}
+
+		var args []string
+
+		if diags := gohcl2.DecodeExpression(e.Args, ctx, &args); diags.HasErrors() {
+			return nil, diags
+		}
+
+		var dir string
+
+		if !IsExpressionEmpty(e.Dir) {
+			if diags := gohcl2.DecodeExpression(e.Dir, ctx, &dir); diags.HasErrors() {
+				return nil, diags
+			}
+		}
+
+		app.expectedExecs = append(app.expectedExecs, expectedExec{
+			Command: cmd,
+			Args:    args,
+			Dir:     dir,
+		})
+	}
+
 	res, err := app.runJobAndUpdateContext(nil, jobCtx, eitherJobRun{static: &t.Run}, new(sync.Mutex), true)
 
 	if res == nil && err != nil {
@@ -676,6 +752,13 @@ type Result struct {
 	Undefined  bool
 	Skipped    bool
 	ExitStatus int
+
+	// Cancelled is set to true when and only when the original command execution has been scheduled concurrently,
+	// but was cancelled before it was actually executed.
+	Cancelled bool
+
+	// Validated is set to true when and only when the command execution was successfully validated against the mock
+	Validated bool
 }
 
 func (res *Result) toCty() cty.Value {
@@ -825,6 +908,8 @@ func (app *App) runJobAndUpdateContext(l *EventLogger, jobCtx *JobContext, run e
 
 	if res == nil {
 		res = &Result{ExitStatus: 1, Stderr: err.Error()}
+	} else if res.Cancelled {
+		res = &Result{ExitStatus: 3, Stderr: err.Error()}
 	}
 
 	m.Lock()
@@ -946,6 +1031,8 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *JobContext, results map[str
 			}()
 		}
 
+		var cancelled bool
+
 		for i := range ids {
 			id := ids[i]
 
@@ -956,10 +1043,23 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *JobContext, results map[str
 			wg.Add(1)
 			workqueue <- func() {
 				defer wg.Done()
-				r, err := f()
+
 				rsm.Lock()
-				rs[ii] = result{r: r, err: err}
+				if cancelled {
+					rs[ii] = result{r: &Result{Cancelled: true}}
+					rsm.Unlock()
+					return
+				}
 				rsm.Unlock()
+
+				r, err := f()
+
+				rsm.Lock()
+				defer rsm.Unlock()
+				rs[ii] = result{r: r, err: err}
+				if err != nil {
+					cancelled = true
+				}
 			}
 		}
 
@@ -970,8 +1070,8 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *JobContext, results map[str
 		var rese *multierror.Error
 
 		for i := range rs {
-			if rs[i].err != nil {
-				rese = multierror.Append(rese, err)
+			if e := rs[i].err; e != nil {
+				rese = multierror.Append(rese, e)
 			}
 		}
 

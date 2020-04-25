@@ -1,0 +1,53 @@
+job "init" {
+  option "tenant" {
+    type = string
+  }
+
+  option "project" {
+    type = string
+  }
+
+  exec {
+    command = "bash"
+    args = ["-c", "cd ${opt.project} && terraform init && (terraform workspace select ${opt.tenant} || terraform workspace new ${opt.tenant})"]
+  }
+}
+
+job "destroy" {
+  option "tenant" {
+    type = string
+  }
+
+  option "project" {
+    type = string
+  }
+
+  exec {
+    command = "bash"
+    args = ["-c", "cd ${opt.project} && terraform destroy -var defaults_config_file=../../defaults.yaml -var tenant_config_file=../../${opt.tenant}.yaml -auto-approve"]
+  }
+}
+
+job "example" {
+  option "tenant" {
+    type = string
+  }
+
+  option "project" {
+    type = string
+  }
+
+  step "init" {
+    run "init" {
+      tenant = opt.tenant
+      project = opt.project
+    }
+  }
+
+  step "destroy" {
+    run "destroy" {
+      tenant = opt.tenant
+      project = opt.project
+    }
+  }
+}

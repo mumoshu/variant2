@@ -187,6 +187,11 @@ func TestExamples(t *testing.T) {
 			wd:      "./examples/testing",
 		},
 		{
+			subject: "examples/testing-with-expectations",
+			args:    []string{"variant", "test"},
+			wd:      "./examples/testing-with-expectations",
+		},
+		{
 			subject: "examples/conditional_run",
 			args:    []string{"variant", "test"},
 			wd:      "./examples/conditional_run",

@@ -180,6 +180,23 @@ type Test struct {
 	Assert    []Assert   `hcl:"assert,block"`
 
 	SourceLocator hcl.Expression `hcl:"__source_locator,attr"`
+
+	ExpectedExecs []Expect `hcl:"expect,block"`
+}
+
+type Expect struct {
+	// Type must be `exec` for now
+	Type string `hcl:"type,label"`
+
+	Command hcl.Expression `hcl:"command,attr"`
+	Args    hcl.Expression `hcl:"args,attr"`
+	Dir     hcl.Expression `hcl:"dir,attr"`
+}
+
+type expectedExec struct {
+	Command string
+	Args    []string
+	Dir     string
 }
 
 type Case struct {
@@ -198,4 +215,16 @@ type App struct {
 	Stdout, Stderr io.Writer
 
 	Trace string
+
+	execInvocationCount int
+
+	expectedExecs []expectedExec
+}
+
+func (app *App) ShallowCopy() App {
+	return *app
+}
+
+func (app App) Ptr() *App {
+	return &app
 }
