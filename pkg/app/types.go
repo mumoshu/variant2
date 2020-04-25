@@ -50,7 +50,7 @@ type DependsOn struct {
 }
 
 type LazyStaticRun struct {
-	Run StaticRun `hcl:"run,block"`
+	Run []StaticRun `hcl:"run,block"`
 }
 
 type StaticRun struct {
@@ -60,12 +60,13 @@ type StaticRun struct {
 }
 
 type LazyDynamicRun struct {
-	Run DynamicRun `hcl:"run,block"`
+	Run []DynamicRun `hcl:"run,block"`
 }
 
 type DynamicRun struct {
-	Job  string         `hcl:"job,attr"`
-	Args hcl.Expression `hcl:"with,attr"`
+	Job       string         `hcl:"job,attr"`
+	Args      hcl.Expression `hcl:"with,attr"`
+	Condition hcl.Expression `hcl:"condition,attr"`
 }
 
 type Parameter struct {

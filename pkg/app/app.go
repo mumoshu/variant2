@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/kr/text"
 
@@ -694,7 +695,8 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 type Result struct {
 	Stdout     string
 	Stderr     string
-	Noop       bool
+	Undefined  bool
+	Skipped    bool
 	ExitStatus int
 }
 
@@ -732,6 +734,23 @@ func (app *App) dispatchRunJob(l *EventLogger, jobCtx *JobContext, run eitherJob
 
 		if err != nil {
 			return nil, err
+		}
+
+		if jobRun.Skipped {
+			if err := l.append(Event{
+				Type: "run:skipped",
+				Time: time.Now(),
+				Run: &RunEvent{
+					Job:  jobRun.Name,
+					Args: map[string]interface{}{},
+				},
+			}); err != nil {
+				return nil, err
+			}
+
+			return &Result{
+				Skipped: true,
+			}, nil
 		}
 	}
 
@@ -803,7 +822,7 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn, s
 		return &Result{
 			Stdout:     stdout,
 			Stderr:     "",
-			Noop:       false,
+			Undefined:  false,
 			ExitStatus: 0,
 		}, nil
 	}

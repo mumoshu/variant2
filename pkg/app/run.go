@@ -9,15 +9,15 @@ import (
 )
 
 func (app *App) runJobInBody(l *EventLogger, jobCtx *JobContext, body hcl.Body, streamOutput bool) (*Result, bool, error) {
-	either := eitherJobRun{}
-
-	var lazyDynamicRun LazyDynamicRun
+	var runs []eitherJobRun
 
 	var lazyStaticRun LazyStaticRun
 
 	sErr := gohcl.DecodeBody(body, jobCtx.evalContext, &lazyStaticRun)
 
 	if sErr.HasErrors() {
+		var lazyDynamicRun LazyDynamicRun
+
 		dErr := gohcl.DecodeBody(body, jobCtx.evalContext, &lazyDynamicRun)
 
 		if dErr != nil {
@@ -31,17 +31,72 @@ func (app *App) runJobInBody(l *EventLogger, jobCtx *JobContext, body hcl.Body, 
 				return nil, false, dErr
 			}
 		} else {
-			either.dynamic = &lazyDynamicRun.Run
+			for i := range lazyDynamicRun.Run {
+				r := lazyDynamicRun.Run[i]
+
+				either := eitherJobRun{}
+
+				either.dynamic = &r
+
+				runs = append(runs, either)
+			}
 		}
 	} else {
-		either.static = &lazyStaticRun.Run
+		for i := range lazyStaticRun.Run {
+			r := lazyStaticRun.Run[i]
+
+			either := eitherJobRun{}
+
+			either.static = &r
+
+			runs = append(runs, either)
+		}
 	}
 
-	if either.static != nil || either.dynamic != nil {
-		res, err := app.runJobAndUpdateContext(l, jobCtx, either, new(sync.Mutex), streamOutput)
-
-		return res, true, err
+	if len(runs) == 0 {
+		return nil, false, nil
 	}
 
-	return nil, false, nil
+	var results []*Result
+
+	for _, r := range runs {
+		res, err := app.runJobAndUpdateContext(l, jobCtx, r, new(sync.Mutex), streamOutput)
+
+		if err != nil {
+			return res, true, err
+		}
+
+		if res == nil {
+			return res, true, nil
+		}
+
+		if !res.Skipped {
+			results = append(results, res)
+		}
+	}
+
+	if len(results) == 0 {
+		return nil, true, nil
+	}
+
+	return aggregateResults(results), true, nil
+}
+
+func aggregateResults(results []*Result) *Result {
+	aggregated := *results[len(results)-1]
+
+	aggregated.Stdout = ""
+	aggregated.Stderr = ""
+
+	for _, r := range results {
+		if r.Stdout != "" {
+			aggregated.Stdout += r.Stdout
+		}
+
+		if r.Stderr != "" {
+			aggregated.Stderr += r.Stderr
+		}
+	}
+
+	return &aggregated
 }

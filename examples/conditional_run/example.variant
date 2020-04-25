@@ -1,0 +1,36 @@
+job "example" {
+  option "print_foo" {
+    type = bool
+  }
+
+  option "print_bar" {
+    type = bool
+  }
+
+  run {
+    job = "print"
+    with = {
+      text = "foo"
+    }
+    condition = opt.print_foo
+  }
+
+  run {
+    job = "print"
+    with = {
+      text = "bar"
+    }
+    condition = opt.print_bar
+  }
+}
+
+job "print" {
+  option "text" {
+    type = string
+  }
+
+  exec {
+    command = "bash"
+    args = ["-c", "echo ${opt.text}"]
+  }
+}

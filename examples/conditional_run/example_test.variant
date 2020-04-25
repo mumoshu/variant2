@@ -1,0 +1,56 @@
+test "example" {
+  case "foo" {
+    print_foo = true
+    print_bar = false
+    stdout = trimspace(<<-EOS
+      foo
+    EOS
+    )
+    err = ""
+    exitstatus = 0
+  }
+
+  case "bar" {
+    print_foo = false
+    print_bar = true
+    stdout = trimspace(<<-EOS
+      bar
+    EOS
+    )
+    err = ""
+    exitstatus = 0
+  }
+
+  case "foobar" {
+    print_foo = true
+    print_bar = true
+    stdout = trimspace(<<-EOS
+      foo
+      bar
+    EOS
+    )
+    err = ""
+    exitstatus = 0
+  }
+
+  case "none" {
+    print_foo = false
+    print_bar = false
+    stdout = ""
+    err = "nothing to run"
+    exitstatus = 1
+  }
+
+  run "example" {
+    print_foo = case.print_foo
+    print_bar = case.print_bar
+  }
+
+  assert "error" {
+    condition = run.err == case.err
+  }
+
+  assert "exitstatus" {
+    condition = run.res.exitstatus == case.exitstatus
+  }
+}
