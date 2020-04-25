@@ -593,7 +593,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			}
 		}
 
-		conf, err := app.getConfigs(jobEvalCtx, cc, j, "config", func(j JobSpec) []Config { return j.Configs }, nil)
+		conf, err := app.getConfigs(jobCtx, cc, j, "config", func(j JobSpec) []Config { return j.Configs }, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -605,7 +605,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			return nil, fmt.Errorf("failed to initialize vals: %v", err)
 		}
 
-		sec, err := app.getConfigs(jobEvalCtx, cc, j, "secret", func(j JobSpec) []Config { return j.Secrets }, func(m map[string]interface{}) (map[string]interface{}, error) {
+		sec, err := app.getConfigs(jobCtx, cc, j, "secret", func(j JobSpec) []Config { return j.Secrets }, func(m map[string]interface{}) (map[string]interface{}, error) {
 			return secretRefsEvaluator.Eval(m)
 		})
 
@@ -1736,7 +1736,9 @@ func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[stri
 	}, nil
 }
 
-func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec, confType string, f func(JobSpec) []Config, g func(map[string]interface{}) (map[string]interface{}, error)) (cty.Value, error) {
+func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confType string, f func(JobSpec) []Config, g func(map[string]interface{}) (map[string]interface{}, error)) (cty.Value, error) {
+	confCtx := jobCtx.evalContext
+
 	confSpecs := append(append([]Config{}, f(cc.JobSpec)...), f(j)...)
 
 	confFields := map[string]cty.Value{}
@@ -1783,9 +1785,20 @@ func (app *App) getConfigs(confCtx *hcl2.EvalContext, cc *HCL2Config, j JobSpec,
 					return cty.NilVal, err
 				}
 
-				args, err := exprToGoMap(confCtx, source.Args)
+				localArgs, err := exprToGoMap(confCtx, source.Args)
+
 				if err != nil {
 					return cty.NilVal, err
+				}
+
+				args := map[string]interface{}{}
+
+				for k, v := range jobCtx.globalArgs {
+					args[k] = v
+				}
+
+				for k, v := range localArgs {
+					args[k] = v
 				}
 
 				res, err := app.run(nil, source.Name, args, args)

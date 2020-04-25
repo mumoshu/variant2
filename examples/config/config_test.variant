@@ -6,7 +6,7 @@ test "app deploy" {
     exitstatus = 0
     err = ""
     out = trimspace(<<EOS
-{"app":"app1","bar":"OPT1","env":"prod","getfoo":"app1,prod,PARAM1","v":"app1prod"}
+{"app":"app1","bar":"OPT1","env":"prod","getfoo":"app_override,prod,PARAM1","v":"app1prod"}
 EOS
     )
   }
@@ -17,7 +17,7 @@ EOS
     exitstatus = 0
     err = ""
     out = trimspace(<<EOS
-{"app":"app2","bar":"OPT1","env":"prod","getfoo":"app2,prod,PARAM1","v":"app2"}
+{"app":"app2","bar":"OPT1","env":"prod","getfoo":"app_override,prod,PARAM1","v":"app2"}
 EOS
     )
   }

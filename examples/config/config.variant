@@ -54,7 +54,7 @@ job "config view" {
     source job {
       name = "getfoo"
       args = {
-        app = opt.app
+        app = "app_override"
         env = opt.env
         param1 = "PARAM1"
       }
@@ -64,7 +64,6 @@ job "config view" {
     source job {
       name = "getbar"
       args = {
-        app = opt.app
         env = opt.env
         opt1 = "OPT1"
       }
