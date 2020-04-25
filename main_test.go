@@ -182,6 +182,11 @@ func TestExamples(t *testing.T) {
 			wd:      "./examples/globals",
 		},
 		{
+			subject: "examples/testing",
+			args:    []string{"variant", "test"},
+			wd:      "./examples/testing",
+		},
+		{
 			subject: "examples/advaned/terraform-and-helmfile-wrapper",
 			args:    []string{"variant", "test"},
 			wd:      "./examples/advanced/terraform-and-helmfile-wrapper",

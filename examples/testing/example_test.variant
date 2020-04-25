@@ -1,0 +1,43 @@
+test "example" {
+  # There are 3 types of variables that should be useful within a test:
+  #
+  # 1. case-independent variables (variable blocks)
+  # 2. case-dependent variables (case block fields)
+  # 3. case-dependent variables that depend on 1 and 2 (self-referencing case fields from within case fields)
+
+  variable "case_independent_global_var" {
+    type = string
+    value = "account"
+  }
+
+  case "ok" {
+    # case field "project" depends on variable "case_independent_global_var"
+    project = var.case_independent_global_var
+
+    # case field "tenant" is set to the string literal "client"
+    tenant = "client"
+
+    err = ""
+    exitstatus = 0
+
+    # case field "stdout" depends on case field "tenant"
+    stdout = trimspace(<<-EOS
+      cd account && terraform init && (terraform workspace select ${case.tenant} || terraform workspace new ${case.tenant})
+      cd account && terraform destroy -var defaults_config_file=../../defaults.yaml -var tenant_config_file=../../${case.tenant}.yaml -auto-approve
+    EOS
+    )
+  }
+
+  run "example" {
+    tenant = case.tenant
+    project = case.project
+  }
+
+  assert "error" {
+    condition = run.err == case.err
+  }
+
+  assert "exitstatus" {
+    condition = run.res.exitstatus == case.exitstatus
+  }
+}

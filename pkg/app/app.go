@@ -1057,23 +1057,75 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 		},
 	}
 
+	ctx, err := addVariables(ctx, t.Variables)
+	if err != nil {
+		return nil, err
+	}
+
 	caseFields := map[string]cty.Value{}
 
-	for k, expr := range c.Args {
+	caseFieldsDAG := dag.New()
+
+	caseFieldToExpr := map[string]hcl2.Expression{}
+
+	for fieldName, expr := range c.Args {
+		deps := map[string]struct{}{}
+
+		for _, v := range expr.Variables() {
+			if !v.IsRelative() && v.RootName() == "case" {
+				// For `fieldName` "bar", `v.RootName()` is "case" which corresponds `case` of `case.foo` in
+				// case "ok" {
+				//    foo = "FOO"
+				//    bar = case.foo
+				// }
+				//
+				// `v.SimpleSplit().Rel[0]` is the TraverseAttr of `foo` in `case.foo`.
+				if r, ok := v.SimpleSplit().Rel[0].(hcl2.TraverseAttr); ok {
+					// r.Name is "foo" that corresponds `foo` in `case.foo`.
+					deps[r.Name] = struct{}{}
+				}
+			}
+		}
+
+		var depFieldNames []string
+
+		for n := range deps {
+			depFieldNames = append(depFieldNames, n)
+		}
+
+		caseFieldsDAG.Add(fieldName, dag.Dependencies(depFieldNames))
+
+		caseFieldToExpr[fieldName] = expr
+	}
+
+	caseFieldsTopology, err := caseFieldsDAG.Sort()
+	if err != nil {
+		return nil, err
+	}
+
+	var sortedCaseFieldNames []string
+
+	for _, p := range caseFieldsTopology {
+		for _, pi := range p {
+			sortedCaseFieldNames = append(sortedCaseFieldNames, pi.Id)
+		}
+	}
+
+	for _, k := range sortedCaseFieldNames {
+		expr, ok := caseFieldToExpr[k]
+		if !ok {
+			return nil, fmt.Errorf("BUG: No expression found for case field %q", k)
+		}
+
 		var v cty.Value
 		if diags := gohcl2.DecodeExpression(expr, ctx, &v); diags.HasErrors() {
 			return nil, diags
 		}
 
 		caseFields[k] = v
-	}
 
-	caseVal := cty.ObjectVal(caseFields)
-	ctx.Variables["case"] = caseVal
-
-	ctx, err := addVariables(ctx, t.Variables)
-	if err != nil {
-		return nil, err
+		caseVal := cty.ObjectVal(caseFields)
+		ctx.Variables["case"] = caseVal
 	}
 
 	jobCtx := &JobContext{
