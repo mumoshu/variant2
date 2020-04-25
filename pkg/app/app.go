@@ -430,37 +430,15 @@ func (app *App) execJob(l *EventLogger, j JobSpec, jobCtx *JobContext, streamOut
 			return nil, err
 		}
 	} else {
-		either := eitherJobRun{}
+		var jobExists bool
 
-		var lazyDynamicRun LazyDynamicRun
+		res, jobExists, err = app.runJobInBody(l, jobCtx, j.Body, streamOutput)
 
-		var lazyStaticRun LazyStaticRun
-
-		sErr := gohcl2.DecodeBody(j.Body, evalCtx, &lazyStaticRun)
-
-		if sErr.HasErrors() {
-			dErr := gohcl2.DecodeBody(j.Body, evalCtx, &lazyDynamicRun)
-
-			if dErr != nil {
-				sErrMsg := sErr.Error()
-				if !strings.Contains(sErrMsg, "Missing run block") && !strings.Contains(sErrMsg, "Missing name for run") {
-					return nil, sErr
-				}
-
-				dErrMsg := dErr.Error()
-				if !strings.Contains(dErrMsg, "Missing run block") {
-					return nil, dErr
-				}
-			} else {
-				either.dynamic = &lazyDynamicRun.Run
-			}
-		} else {
-			either.static = &lazyStaticRun.Run
+		if err != nil {
+			return nil, err
 		}
 
-		if either.static != nil || either.dynamic != nil {
-			res, err = app.runJobAndUpdateContext(l, jobCtx, either, new(sync.Mutex), streamOutput)
-		} else if j.Assert != nil {
+		if !jobExists && j.Assert != nil {
 			for _, a := range j.Assert {
 				if err2 := app.execAssert(evalCtx, a); err2 != nil {
 					return nil, err2
