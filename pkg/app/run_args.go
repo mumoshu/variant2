@@ -21,4 +21,3 @@ func buildArgsFromExpr(jobCtx *JobContext, expr hcl.Expression) (map[string]inte
 
 	return args, nil
 }
-

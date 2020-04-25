@@ -779,8 +779,6 @@ func cloneEvalContext(c *hcl2.EvalContext) *hcl2.EvalContext {
 }
 
 func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn, streamOutput bool) (*Result, error) {
-	ctx := jobCtx.evalContext
-
 	ctyItems := []cty.Value{}
 
 	items := []interface{}{}
@@ -805,18 +803,12 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn, s
 		var stdout string
 
 		for _, item := range items {
-			iterCtx := cloneEvalContext(ctx)
-
 			v, err := goToCty(item)
 			if err != nil {
 				return nil, err
 			}
 
-			iterCtx.Variables["item"] = v
-
-			jobCtx.evalContext = iterCtx
-
-			args, err := buildArgsFromExpr(jobCtx.WithEvalContext(iterCtx).Ptr(), r.Args)
+			args, err := buildArgsFromExpr(jobCtx.WithVariable("item", v).Ptr(), r.Args)
 			if err != nil {
 				return nil, err
 			}
@@ -1152,6 +1144,14 @@ func (c *JobContext) WithEvalContext(evalCtx *hcl2.EvalContext) JobContext {
 		evalContext: evalCtx,
 		globalArgs:  c.globalArgs,
 	}
+}
+
+func (c *JobContext) WithVariable(name string, v cty.Value) JobContext {
+	newEvalCtx := cloneEvalContext(c.evalContext)
+
+	newEvalCtx.Variables[name] = v
+
+	return c.WithEvalContext(newEvalCtx)
 }
 
 func (c JobContext) Ptr() *JobContext {
