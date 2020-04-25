@@ -3,6 +3,7 @@ package app
 import (
 	"flag"
 	"fmt"
+	"github.com/variantdev/vals"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -31,7 +32,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/variantdev/dag/pkg/dag"
 	"github.com/variantdev/mod/pkg/shell"
-	"github.com/variantdev/vals"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
 )
@@ -143,28 +143,6 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 				}
 			}
 		}
-
-		conf, err := app.getConfigs(jobCtx, cc, j, "config", func(j JobSpec) []Config { return j.Configs }, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		jobEvalCtx.Variables["conf"] = conf
-
-		secretRefsEvaluator, err := vals.New(vals.Options{CacheSize: 100})
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize vals: %v", err)
-		}
-
-		sec, err := app.getConfigs(jobCtx, cc, j, "secret", func(j JobSpec) []Config { return j.Secrets }, func(m map[string]interface{}) (map[string]interface{}, error) {
-			return secretRefsEvaluator.Eval(m)
-		})
-
-		if err != nil {
-			return nil, err
-		}
-
-		jobEvalCtx.Variables["sec"] = sec
 
 		needs := map[string]cty.Value{}
 
@@ -1213,7 +1191,7 @@ func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[stri
 	}
 
 	varSpecs := append(append([]Variable{}, cc.Variables...), j.Variables...)
-	varCtx := &hcl2.EvalContext{
+	modCtx := &hcl2.EvalContext{
 		Functions: conf.Functions("."),
 		Variables: map[string]cty.Value{
 			"param":   cty.ObjectVal(params),
@@ -1222,17 +1200,13 @@ func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[stri
 		},
 	}
 
-	jobCtx, err := addVariables(varCtx, varSpecs)
+	mod, err := getModule(modCtx, cc.Module, j.Module)
 	if err != nil {
 		return nil, err
 	}
 
-	mod, err := getModule(jobCtx, cc.Module, j.Module)
-	if err != nil {
-		return nil, err
-	}
-
-	jobCtx.Variables["mod"] = mod
+	confEvalCtx := cloneEvalContext(modCtx)
+	confEvalCtx.Variables["mod"] = mod
 
 	globalArgs := map[string]interface{}{}
 
@@ -1258,10 +1232,41 @@ func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[stri
 		globalArgs[k] = v
 	}
 
-	return &JobContext{
-		evalContext: jobCtx,
+	confJobCtx := &JobContext{
+		evalContext: confEvalCtx,
 		globalArgs:  globalArgs,
-	}, nil
+	}
+
+	conf, err := app.getConfigs(confJobCtx, cc, j, "config", func(j JobSpec) []Config { return j.Configs }, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	secJobCtx := confJobCtx.WithVariable("conf", conf).Ptr()
+
+	secretRefsEvaluator, err := vals.New(vals.Options{CacheSize: 100})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize vals: %v", err)
+	}
+
+	sec, err := app.getConfigs(secJobCtx, cc, j, "secret", func(j JobSpec) []Config { return j.Secrets }, func(m map[string]interface{}) (map[string]interface{}, error) {
+		return secretRefsEvaluator.Eval(m)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	varJobCtx := secJobCtx.WithVariable("sec", sec)
+
+	varCtx, err := addVariables(varJobCtx.evalContext, varSpecs)
+	if err != nil {
+		return nil, err
+	}
+
+	jobCtx := varJobCtx.WithEvalContext(varCtx).Ptr()
+
+	return jobCtx, nil
 }
 
 func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confType string, f func(JobSpec) []Config, g func(map[string]interface{}) (map[string]interface{}, error)) (cty.Value, error) {

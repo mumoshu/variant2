@@ -72,10 +72,18 @@ job "config view" {
     }
   }
 
+  variable "var1" {
+    value = conf.foo
+  }
+
   exec {
     command = "echo"
     args = [
-      jsonencode(conf.foo)
+      <<EOS
+${jsonencode(conf.foo)}
+${jsonencode(var.var1)}
+      EOS
+      ,
     ]
   }
 }
