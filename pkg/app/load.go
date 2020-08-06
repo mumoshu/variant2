@@ -246,9 +246,13 @@ func newApp(app *App, cc *HCL2Config, importBaseDir string) (*App, error) {
 				var newJobName string
 				if j.Name == "" {
 					newJobName = importedJob.Name
-				} else {
+				} else if importedJob.Name != "" {
 					newJobName = fmt.Sprintf("%s %s", j.Name, importedJob.Name)
+				} else {
+					newJobName = j.Name
 				}
+
+				importedJob.Name = newJobName
 
 				jobByName[newJobName] = importedJob
 

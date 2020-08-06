@@ -572,12 +572,12 @@ func (r *Runner) Cobra() (*cobra.Command, error) {
 	jobs := map[string]app.JobSpec{}
 	jobNames := []string{}
 
-	for _, j := range ap.JobByName {
+	for jobName, j := range ap.JobByName {
 		var name string
-		if j.Name == "" {
+		if jobName == "" {
 			name = rootCmdName
 		} else {
-			name = fmt.Sprintf("%s %s", rootCmdName, j.Name)
+			name = fmt.Sprintf("%s %s", rootCmdName, jobName)
 		}
 
 		jobs[name] = j
