@@ -245,10 +245,18 @@ func newApp(app *App, cc *HCL2Config, importBaseDir string) (*App, error) {
 			for _, importedJob := range importedJobs {
 				var newJobName string
 				if j.Name == "" {
+					if importedJob.Name == "" {
+						// Skip overriding the job itself
+						// This means that if the user is importing library jobs in the top-level `import`,
+						// the user-side needs the exact set of global `parameters` and `options` as the library,
+						// to make library jobs work
+						continue
+					}
 					newJobName = importedJob.Name
 				} else if importedJob.Name != "" {
 					newJobName = fmt.Sprintf("%s %s", j.Name, importedJob.Name)
 				} else {
+					// Import the top-level job in the library as the non-top-level job on the user side
 					newJobName = j.Name
 				}
 
