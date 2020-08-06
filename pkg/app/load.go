@@ -227,10 +227,6 @@ func newApp(app *App, cc *HCL2Config, importBaseDir string, enableImports bool) 
 		jobByName[j.Name] = j
 
 		if j.Import != nil {
-			if !enableImports {
-				return nil, fmt.Errorf("[bug] Imports are disable in the embedded mode")
-			}
-
 			var d string
 
 			if strings.Contains(*j.Import, ":") {
