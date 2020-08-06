@@ -109,7 +109,7 @@ func New(dir string) (*App, error) {
 		return app, err
 	}
 
-	return newApp(app, cc, dir, true)
+	return newApp(app, cc, dir)
 }
 
 func NewFromFile(file string) (*App, error) {
@@ -125,7 +125,7 @@ func NewFromFile(file string) (*App, error) {
 
 	dir := filepath.Dir(file)
 
-	return newApp(app, cc, dir, true)
+	return newApp(app, cc, dir)
 }
 
 func NewFromSources(srcs map[string][]byte) (*App, error) {
@@ -139,7 +139,7 @@ func NewFromSources(srcs map[string][]byte) (*App, error) {
 		return app, err
 	}
 
-	return newApp(app, cc, "", false)
+	return newApp(app, cc, "")
 }
 
 func newConfigFromDir(dirPathOrURL string) (map[string]*hcl.File, *HCL2Config, error) {
@@ -217,7 +217,7 @@ func newConfigFromSources(srcs map[string][]byte) (map[string]*hcl.File, hcl.Bod
 	return nameToFiles, c.Body, cc, err
 }
 
-func newApp(app *App, cc *HCL2Config, importBaseDir string, enableImports bool) (*App, error) {
+func newApp(app *App, cc *HCL2Config, importBaseDir string) (*App, error) {
 	jobs := append([]JobSpec{cc.JobSpec}, cc.Jobs...)
 
 	var conf *HCL2Config
