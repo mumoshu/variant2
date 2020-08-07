@@ -117,6 +117,7 @@ func NewFromFile(file string) (*App, error) {
 
 	app := &App{
 		Files: nameToFiles,
+		Trace: os.Getenv("VARIANT_TRACE"),
 	}
 
 	if err != nil {
@@ -133,6 +134,7 @@ func NewFromSources(srcs map[string][]byte) (*App, error) {
 
 	app := &App{
 		Files: nameToFiles,
+		Trace: os.Getenv("VARIANT_TRACE"),
 	}
 
 	if err != nil {
