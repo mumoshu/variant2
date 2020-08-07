@@ -248,11 +248,15 @@ func newApp(app *App, cc *HCL2Config, importBaseDir string) (*App, error) {
 				var newJobName string
 				if j.Name == "" {
 					if importedJob.Name == "" {
-						// Skip overriding the job itself
-						// This means that if the user is importing library jobs in the top-level `import`,
-						// the user-side needs the exact set of global `parameters` and `options` as the library,
-						// to make library jobs work
-						continue
+						// Do not override global parameters and options.
+						//
+						// If the user-side has a global parameter/option that has the same name as the library-side,
+						// their types MUST match.
+						merged, err := mergeJobs(importedJob, j)
+						if err != nil {
+							return nil, err
+						}
+						importedJob = *merged
 					}
 					newJobName = importedJob.Name
 				} else if importedJob.Name != "" {
@@ -282,4 +286,47 @@ func newApp(app *App, cc *HCL2Config, importBaseDir string) (*App, error) {
 	app.JobByName = jobByName
 
 	return app, nil
+}
+
+func mergeJobs(src JobSpec, dst JobSpec) (*JobSpec, error) {
+	paramMap := map[string]Parameter{}
+	optMap := map[string]OptionSpec{}
+
+	for _, p := range dst.Parameters {
+		paramMap[p.Name] = p
+	}
+
+	for _, o := range dst.Options {
+		optMap[o.Name] = o
+	}
+
+	for _, p := range src.Parameters {
+		if _, exists := paramMap[p.Name]; !exists {
+			paramMap[p.Name] = p
+		}
+	}
+
+	for _, o := range src.Options {
+		if _, exists := optMap[o.Name]; !exists {
+			optMap[o.Name] = o
+		}
+	}
+
+	var (
+		params []Parameter
+		opts   []OptionSpec
+	)
+
+	for _, p := range paramMap {
+		params = append(params, p)
+	}
+
+	for _, o := range optMap {
+		opts = append(opts, o)
+	}
+
+	dst.Parameters = params
+	dst.Options = opts
+
+	return &dst, nil
 }
