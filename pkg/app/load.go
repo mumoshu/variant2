@@ -109,7 +109,21 @@ func New(dir string) (*App, error) {
 		return app, err
 	}
 
-	return newApp(app, cc, dir)
+	return newApp(app, cc, NewImportFunc(dir))
+}
+
+func NewImportFunc(importBaseDir string) func(string) (*App, error) {
+	return func(dir string) (*App, error) {
+		var d string
+
+		if strings.Contains(dir, ":") {
+			d = dir
+		} else {
+			d = filepath.Join(importBaseDir, dir)
+		}
+
+		return New(d)
+	}
 }
 
 func NewFromFile(file string) (*App, error) {
@@ -126,11 +140,11 @@ func NewFromFile(file string) (*App, error) {
 
 	dir := filepath.Dir(file)
 
-	return newApp(app, cc, dir)
+	return newApp(app, cc, NewImportFunc(dir))
 }
 
 func NewFromSources(srcs map[string][]byte) (*App, error) {
-	nameToFiles, _, cc, err := newConfigFromSources(srcs)
+	nameToFiles, cc, err := newConfigFromSources(srcs)
 
 	app := &App{
 		Files: nameToFiles,
@@ -141,7 +155,7 @@ func NewFromSources(srcs map[string][]byte) (*App, error) {
 		return app, err
 	}
 
-	return newApp(app, cc, "")
+	return newApp(app, cc, NewImportFunc(""))
 }
 
 func newConfigFromDir(dirPathOrURL string) (map[string]*hcl.File, *HCL2Config, error) {
@@ -198,7 +212,7 @@ func newConfigFromFiles(files []string) (map[string]*hcl.File, *HCL2Config, erro
 	return nameToFiles, cc, err
 }
 
-func newConfigFromSources(srcs map[string][]byte) (map[string]*hcl.File, hcl.Body, *HCL2Config, error) {
+func newConfigFromSources(srcs map[string][]byte) (map[string]*hcl.File, *HCL2Config, error) {
 	l := &hcl2Loader{
 		Parser: hclparse.NewParser(),
 	}
@@ -206,20 +220,15 @@ func newConfigFromSources(srcs map[string][]byte) (map[string]*hcl.File, hcl.Bod
 	c, nameToFiles, err := l.loadSources(srcs)
 
 	if err != nil {
-		var body hcl.Body
-		if c != nil {
-			body = c.Body
-		}
-
-		return nameToFiles, body, nil, err
+		return nameToFiles, nil, err
 	}
 
 	cc, err := c.HCL2Config()
 
-	return nameToFiles, c.Body, cc, err
+	return nameToFiles, cc, err
 }
 
-func newApp(app *App, cc *HCL2Config, importBaseDir string) (*App, error) {
+func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*App, error) {
 	jobs := append([]JobSpec{cc.JobSpec}, cc.Jobs...)
 
 	var conf *HCL2Config
@@ -229,15 +238,7 @@ func newApp(app *App, cc *HCL2Config, importBaseDir string) (*App, error) {
 		jobByName[j.Name] = j
 
 		if j.Import != nil {
-			var d string
-
-			if strings.Contains(*j.Import, ":") {
-				d = *j.Import
-			} else {
-				d = filepath.Join(importBaseDir, *j.Import)
-			}
-
-			a, err := New(d)
+			a, err := importDir(*j.Import)
 
 			if err != nil {
 				return nil, err
