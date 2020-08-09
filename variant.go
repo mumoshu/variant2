@@ -348,34 +348,8 @@ func getMergedParamsAndOpts(
 	return params, opts, nil
 }
 
-func (m *Main) initAppFromDir(dir string) (*app.App, error) {
-	ap, err := app.New(app.FromDir(dir))
-	if err != nil {
-		ap.PrintError(err)
-		return nil, err
-	}
-
-	ap.Stdout = m.Stdout
-	ap.Stderr = m.Stderr
-
-	return ap, nil
-}
-
-func (m *Main) initAppFromFile(file string) (*app.App, error) {
-	ap, err := app.New(app.FromFile(file))
-	if err != nil {
-		ap.PrintError(err)
-		return nil, err
-	}
-
-	ap.Stdout = m.Stdout
-	ap.Stderr = m.Stderr
-
-	return ap, nil
-}
-
-func (m *Main) initAppFromSource(cmd string, code []byte) (*app.App, error) {
-	ap, err := app.New(app.FromSources(map[string][]byte{cmd: code}))
+func (m *Main) initApp(setup app.Setup) (*app.App, error) {
+	ap, err := app.New(setup)
 	if err != nil {
 		ap.PrintError(err)
 		return nil, err
@@ -406,7 +380,7 @@ func (m Main) Runner() (*Runner, error) {
 			return nil, errors.New("Main.Command must be set when loadling from Variant source file")
 		}
 
-		m2, err = m.runnerFromSource(m.Command, m.Source)
+		m2, err = m.createRunner(m.Command, app.FromSources(map[string][]byte{m.Command: m.Source}))
 
 		if err != nil {
 			return nil, err
@@ -434,9 +408,9 @@ func (m Main) Runner() (*Runner, error) {
 		cmd := m.Command
 
 		if info.IsDir() {
-			m2, err = m.runnerFromDir(cmd, path)
+			m2, err = m.createRunner(cmd, app.FromDir(path))
 		} else {
-			m2, err = m.runnerFromFile(cmd, path)
+			m2, err = m.createRunner(cmd, app.FromFile(path))
 		}
 
 		if err != nil {
@@ -447,26 +421,8 @@ func (m Main) Runner() (*Runner, error) {
 	return m2, nil
 }
 
-func (m Main) runnerFromDir(cmd string, dir string) (*Runner, error) {
-	ap, err := m.initAppFromDir(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	return m.newRunner(ap, cmd), nil
-}
-
-func (m Main) runnerFromFile(cmd string, file string) (*Runner, error) {
-	ap, err := m.initAppFromFile(file)
-	if err != nil {
-		return nil, err
-	}
-
-	return m.newRunner(ap, cmd), nil
-}
-
-func (m Main) runnerFromSource(cmd string, code []byte) (*Runner, error) {
-	ap, err := m.initAppFromSource(cmd, code)
+func (m Main) createRunner(cmd string, setup app.Setup) (*Runner, error) {
+	ap, err := m.initApp(setup)
 	if err != nil {
 		return nil, err
 	}
