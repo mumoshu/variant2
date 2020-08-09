@@ -190,6 +190,7 @@ func newConfigFromDir(dirPathOrURL string) (map[string]*hcl.File, *HCL2Config, e
 		} else {
 			cacheDir, err = remote.ResolveDir(us)
 		}
+
 		if err != nil {
 			return nil, nil, err
 		}
