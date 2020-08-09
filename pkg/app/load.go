@@ -178,7 +178,18 @@ func newConfigFromDir(dirPathOrURL string) (map[string]*hcl.File, *HCL2Config, e
 
 		us := forcePrefix + "::" + u.String()
 
-		cacheDir, err := remote.ResolveDir(us)
+		var cacheDir string
+
+		u2, err := depresolver.Parse(us)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if u2.File != "" {
+			cacheDir, err = remote.ResolveFile(us)
+		} else {
+			cacheDir, err = remote.ResolveDir(us)
+		}
 		if err != nil {
 			return nil, nil, err
 		}
@@ -237,17 +248,26 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 	for _, j := range jobs {
 		jobByName[j.Name] = j
 
+		var importSources []string
+		if j.Imports != nil {
+			importSources = append(importSources, *j.Imports...)
+		}
 		if j.Import != nil {
-			a, err := importDir(*j.Import)
+			importSources = append(importSources, *j.Import)
+		}
 
-			if err != nil {
-				return nil, err
-			}
+		if len(importSources) > 0 {
+			for _, src := range importSources {
+				a, err := importDir(src)
 
-			importedJobs := append([]JobSpec{a.Config.JobSpec}, a.Config.Jobs...)
-			for _, importedJob := range importedJobs {
-				var newJobName string
-				if j.Name == "" {
+				if err != nil {
+					return nil, err
+				}
+
+				importedJobs := append([]JobSpec{a.Config.JobSpec}, a.Config.Jobs...)
+				for _, importedJob := range importedJobs {
+					var newJobName string
+
 					if importedJob.Name == "" {
 						// Do not override global parameters and options.
 						//
@@ -259,20 +279,23 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 						}
 						importedJob = *merged
 					}
-					newJobName = importedJob.Name
-				} else if importedJob.Name != "" {
-					newJobName = fmt.Sprintf("%s %s", j.Name, importedJob.Name)
-				} else {
-					// Import the top-level job in the library as the non-top-level job on the user side
-					newJobName = j.Name
-				}
 
-				importedJob.Name = newJobName
+					if j.Name == "" {
+						newJobName = importedJob.Name
+					} else if importedJob.Name != "" {
+						newJobName = fmt.Sprintf("%s %s", j.Name, importedJob.Name)
+					} else {
+						// Import the top-level job in the library as the non-top-level job on the user side
+						newJobName = j.Name
+					}
 
-				jobByName[newJobName] = importedJob
+					importedJob.Name = newJobName
 
-				if j.Name == "" && importedJob.Name == "" {
-					conf = a.Config
+					jobByName[newJobName] = importedJob
+
+					if j.Name == "" && importedJob.Name == "" {
+						conf = a.Config
+					}
 				}
 			}
 		}

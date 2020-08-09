@@ -140,6 +140,12 @@ func TestExamples(t *testing.T) {
 			wd:          "./examples/advanced/import",
 		},
 		{
+			subject:     "import-multi",
+			variantName: "",
+			args:        []string{"variant", "test"},
+			wd:          "./examples/advanced/import-multi",
+		},
+		{
 			subject:     "options",
 			variantName: "",
 			args:        []string{"variant", "test"},

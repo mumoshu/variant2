@@ -127,11 +127,12 @@ type JobSpec struct {
 
 	SourceLocator hcl.Expression `hcl:"__source_locator,attr"`
 
-	Deps   []DependsOn    `hcl:"depends_on,block"`
-	Exec   *Exec          `hcl:"exec,block"`
-	Assert []Assert       `hcl:"assert,block"`
-	Fail   hcl.Expression `hcl:"fail,attr"`
-	Import *string        `hcl:"import,attr"`
+	Deps    []DependsOn    `hcl:"depends_on,block"`
+	Exec    *Exec          `hcl:"exec,block"`
+	Assert  []Assert       `hcl:"assert,block"`
+	Fail    hcl.Expression `hcl:"fail,attr"`
+	Import  *string        `hcl:"import,attr"`
+	Imports *[]string      `hcl:"imports,attr"`
 
 	// Private hides the job from `variant run -h` when set to true
 	Private *bool `hcl:"private,attr"`
