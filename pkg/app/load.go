@@ -249,9 +249,11 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 		jobByName[j.Name] = j
 
 		var importSources []string
+
 		if j.Imports != nil {
 			importSources = append(importSources, *j.Imports...)
 		}
+
 		if j.Import != nil {
 			importSources = append(importSources, *j.Import)
 		}
@@ -273,10 +275,8 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 						//
 						// If the user-side has a global parameter/option that has the same name as the library-side,
 						// their types MUST match.
-						merged, err := mergeJobs(importedJob, j)
-						if err != nil {
-							return nil, err
-						}
+						merged := mergeJobs(importedJob, j)
+
 						importedJob = *merged
 					}
 
@@ -312,7 +312,7 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 	return app, nil
 }
 
-func mergeJobs(src JobSpec, dst JobSpec) (*JobSpec, error) {
+func mergeJobs(src JobSpec, dst JobSpec) *JobSpec {
 	paramMap := map[string]Parameter{}
 	optMap := map[string]OptionSpec{}
 
@@ -352,5 +352,5 @@ func mergeJobs(src JobSpec, dst JobSpec) (*JobSpec, error) {
 	dst.Parameters = params
 	dst.Options = opts
 
-	return &dst, nil
+	return &dst
 }
