@@ -7,7 +7,7 @@ import (
 )
 
 func TestExampleComplex(t *testing.T) {
-	app, err := New("../../examples/complex")
+	app, err := New(FromDir("../../examples/complex"))
 	app.Stdout = os.Stdout
 	app.Stderr = os.Stderr
 

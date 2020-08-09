@@ -97,18 +97,64 @@ func (t *configurable) HCL2Config() (*HCL2Config, error) {
 	return config, nil
 }
 
-func New(dir string) (*App, error) {
-	fs, err := findVariantFiles(dir)
+type Instance struct {
+	Sources map[string][]byte
+	Dir     string
+}
+
+type Setup func() (*Instance, error)
+
+func FromFile(path string) Setup {
+	return func() (*Instance, error) {
+		srcs, err := loadFiles(path)
+		if err != nil {
+			return nil, err
+		}
+
+		dir := filepath.Dir(path)
+
+		return &Instance{
+			Sources: srcs,
+			Dir:     dir,
+		}, nil
+	}
+}
+
+func FromDir(dir string) Setup {
+	return func() (*Instance, error) {
+		fs, err := findVariantFiles(dir)
+		if err != nil {
+			return nil, err
+		}
+
+		srcs, err := loadFiles(fs...)
+		if err != nil {
+			return nil, err
+		}
+
+		return &Instance{
+			Sources: srcs,
+			Dir:     dir,
+		}, nil
+	}
+}
+
+func FromSources(srcs map[string][]byte) Setup {
+	return func() (*Instance, error) {
+		return &Instance{
+			Sources: srcs,
+			Dir:     "",
+		}, nil
+	}
+}
+
+func New(setup Setup) (*App, error) {
+	instance, err := setup()
 	if err != nil {
 		return nil, err
 	}
 
-	srcs, err := loadFiles(fs...)
-	if err != nil {
-		return nil, err
-	}
-
-	nameToFiles, cc, err := newConfigFromSources(srcs)
+	nameToFiles, cc, err := newConfigFromSources(instance.Sources)
 
 	app := &App{
 		Files: nameToFiles,
@@ -119,7 +165,7 @@ func New(dir string) (*App, error) {
 		return app, err
 	}
 
-	return newApp(app, cc, NewImportFunc(dir))
+	return newApp(app, cc, NewImportFunc(instance.Dir))
 }
 
 func NewImportFunc(importBaseDir string) func(string) (*App, error) {
@@ -132,45 +178,8 @@ func NewImportFunc(importBaseDir string) func(string) (*App, error) {
 			d = filepath.Join(importBaseDir, dir)
 		}
 
-		return New(d)
+		return New(FromDir(d))
 	}
-}
-
-func NewFromFile(file string) (*App, error) {
-	srcs, err := loadFiles(file)
-	if err != nil {
-		return nil, err
-	}
-
-	nameToFiles, cc, err := newConfigFromSources(srcs)
-
-	app := &App{
-		Files: nameToFiles,
-		Trace: os.Getenv("VARIANT_TRACE"),
-	}
-
-	if err != nil {
-		return app, err
-	}
-
-	dir := filepath.Dir(file)
-
-	return newApp(app, cc, NewImportFunc(dir))
-}
-
-func NewFromSources(srcs map[string][]byte) (*App, error) {
-	nameToFiles, cc, err := newConfigFromSources(srcs)
-
-	app := &App{
-		Files: nameToFiles,
-		Trace: os.Getenv("VARIANT_TRACE"),
-	}
-
-	if err != nil {
-		return app, err
-	}
-
-	return newApp(app, cc, NewImportFunc(""))
 }
 
 func findVariantFiles(dirPathOrURL string) ([]string, error) {

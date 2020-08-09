@@ -349,7 +349,7 @@ func getMergedParamsAndOpts(
 }
 
 func (m *Main) initAppFromDir(dir string) (*app.App, error) {
-	ap, err := app.New(dir)
+	ap, err := app.New(app.FromDir(dir))
 	if err != nil {
 		ap.PrintError(err)
 		return nil, err
@@ -362,7 +362,7 @@ func (m *Main) initAppFromDir(dir string) (*app.App, error) {
 }
 
 func (m *Main) initAppFromFile(file string) (*app.App, error) {
-	ap, err := app.NewFromFile(file)
+	ap, err := app.New(app.FromFile(file))
 	if err != nil {
 		ap.PrintError(err)
 		return nil, err
@@ -375,7 +375,7 @@ func (m *Main) initAppFromFile(file string) (*app.App, error) {
 }
 
 func (m *Main) initAppFromSource(cmd string, code []byte) (*app.App, error) {
-	ap, err := app.NewFromSources(map[string][]byte{cmd: code})
+	ap, err := app.New(app.FromSources(map[string][]byte{cmd: code}))
 	if err != nil {
 		ap.PrintError(err)
 		return nil, err
