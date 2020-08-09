@@ -33,23 +33,84 @@ type Main struct {
 	Args           []string
 	Getenv         func(string) string
 	Getwd          func() (string, error)
+	Setup          app.Setup
 }
 
-func Load(path string) (*Runner, error) {
-	m := Init(Main{Command: filepath.Base(path), Path: path})
+type Setup func() (*Main, error)
 
-	return m.Runner()
+type InitParams struct {
+	Command string
+	Setup   app.Setup
 }
 
-func Eval(cmd, source string) (*Runner, error) {
-	m := Init(Main{Command: cmd, Source: []byte(source)})
+type Option func(*Main)
 
-	return m.Runner()
+func FromPath(path string, opts ...Option) Setup {
+	return func() (*Main, error) {
+		if path == "" {
+			var err error
+
+			path, err = os.Getwd()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, err
+		}
+
+		var setup app.Setup
+
+		if info.IsDir() {
+			setup = app.FromDir(path)
+		} else {
+			setup = app.FromFile(path)
+		}
+
+		m := &Main{
+			Setup: setup,
+		}
+
+		if m.Command == "" {
+			m.Command = filepath.Base(path)
+		}
+
+		for _, o := range opts {
+			o(m)
+		}
+
+		return m, nil
+	}
 }
 
-func MustEval(cmd, source string) *Runner {
-	r, err := Eval(cmd, source)
+func FromSource(cmd, source string) Setup {
+	return func() (*Main, error) {
+		if cmd == "" {
+			return nil, errors.New("command name must be set when loadling from Variant source file")
+		}
 
+		return &Main{
+			Command: cmd,
+			Setup:   app.FromSources(map[string][]byte{cmd: []byte(source)}),
+		}, nil
+	}
+}
+
+func Load(setup Setup) (*Runner, error) {
+	initParams, err := setup()
+	if err != nil {
+		return nil, err
+	}
+
+	m := Init(*initParams)
+
+	return m.createRunner(m.Command, m.Setup)
+}
+
+func MustLoad(setup Setup) *Runner {
+	r, err := Load(setup)
 	if err != nil {
 		panic(err)
 	}
@@ -61,6 +122,54 @@ func New() Main {
 	return Init(Main{})
 }
 
+type Env struct {
+	Args   []string
+	Getenv func(name string) string
+	Getwd  func() (string, error)
+}
+
+func GetPathAndArgsFromEnv(env Env) (string, string, []string) {
+	osArgs := env.Args
+
+	var cmd string
+
+	var path string
+
+	if len(osArgs) > 1 {
+		file := osArgs[1]
+		info, err := os.Stat(file)
+
+		if err == nil && info != nil && !info.IsDir() {
+			if len(osArgs) > 2 {
+				osArgs = osArgs[2:]
+			}
+
+			path = file
+			cmd = filepath.Base(file)
+		} else {
+			osArgs = osArgs[1:]
+		}
+	} else {
+		osArgs = []string{}
+	}
+
+	if path == "" {
+		dirFromEnv := env.Getenv("VARIANT_DIR")
+		if dirFromEnv != "" {
+			path = dirFromEnv
+		} else {
+			var err error
+
+			path, err = env.Getwd()
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+
+	return cmd, path, osArgs
+}
+
 func Init(m Main) Main {
 	if m.Stdout == nil {
 		m.Stdout = os.Stdout
@@ -68,30 +177,6 @@ func Init(m Main) Main {
 
 	if m.Stderr == nil {
 		m.Stderr = os.Stderr
-	}
-
-	if m.Args == nil || len(m.Args) == 0 {
-		m.Args = os.Args
-	}
-
-	if m.Path == "" && len(m.Args) > 1 {
-		file := m.Args[1]
-		info, err := os.Stat(file)
-
-		if err == nil && info != nil && !info.IsDir() {
-			cmdName := filepath.Base(file)
-			args := []string{cmdName}
-
-			m.Command = cmdName
-
-			if len(m.Args) > 2 {
-				args = append(args, m.Args[2:]...)
-			}
-
-			m.Args = args
-
-			m.Path = file
-		}
 	}
 
 	if m.Getenv == nil {
@@ -105,11 +190,6 @@ func Init(m Main) Main {
 	cmdNameFromEnv := m.Getenv("VARIANT_NAME")
 	if cmdNameFromEnv != "" {
 		m.Command = cmdNameFromEnv
-	}
-
-	dirFromEnv := m.Getenv("VARIANT_DIR")
-	if dirFromEnv != "" {
-		m.Path = dirFromEnv
 	}
 
 	return m
@@ -359,66 +439,6 @@ func (m *Main) initApp(setup app.Setup) (*app.App, error) {
 	ap.Stderr = m.Stderr
 
 	return ap, nil
-}
-
-func (m Main) Run() error {
-	r, err := m.Runner()
-	if err != nil {
-		return err
-	}
-
-	return r.Run(m.Args[1:], RunOptions{DisableLocking: true})
-}
-
-func (m Main) Runner() (*Runner, error) {
-	var m2 *Runner
-
-	if m.Source != nil {
-		var err error
-
-		if m.Command == "" {
-			return nil, errors.New("Main.Command must be set when loadling from Variant source file")
-		}
-
-		m2, err = m.createRunner(m.Command, app.FromSources(map[string][]byte{m.Command: m.Source}))
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if m2 == nil {
-		path := m.Path
-
-		if path == "" {
-			var err error
-
-			path, err = m.Getwd()
-
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		info, err := os.Stat(path)
-		if err != nil {
-			return nil, err
-		}
-
-		cmd := m.Command
-
-		if info.IsDir() {
-			m2, err = m.createRunner(cmd, app.FromDir(path))
-		} else {
-			m2, err = m.createRunner(cmd, app.FromFile(path))
-		}
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return m2, nil
 }
 
 func (m Main) createRunner(cmd string, setup app.Setup) (*Runner, error) {

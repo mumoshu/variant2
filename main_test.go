@@ -213,10 +213,8 @@ func TestExamples(t *testing.T) {
 		tc := testcases[i]
 		t.Run(fmt.Sprintf("%d: %s", i, tc.subject), func(t *testing.T) {
 			outRead, outWrite := io.Pipe()
-			m := Init(Main{
-				Stdout: outWrite,
-				Stderr: os.Stderr,
-				Args:   tc.args,
+			env := Env{
+				Args: tc.args,
 				Getenv: func(name string) string {
 					switch name {
 					case "VARIANT_NAME":
@@ -233,11 +231,16 @@ func TestExamples(t *testing.T) {
 					}
 					return "", fmt.Errorf("Unexpected call to getw")
 				},
-			})
+			}
 			var err error
 
 			go func() {
-				err = m.Run()
+				err = RunMain(env, func(m *Main) {
+					m.Stdout = outWrite
+					m.Stderr = os.Stderr
+					m.Getenv = env.Getenv
+					m.Getwd = env.Getwd
+				})
 				outWrite.Close()
 			}()
 
@@ -289,10 +292,8 @@ func TestExport(t *testing.T) {
 		tc := testcases[i]
 		t.Run(fmt.Sprintf("%d: %s", i, tc.subject), func(t *testing.T) {
 			outRead, outWrite := io.Pipe()
-			m := Init(Main{
-				Stdout: outWrite,
-				Stderr: os.Stderr,
-				Args:   append(append([]string{}, tc.exportArgs...), tc.srcDir, tc.dstDir),
+			env := Env{
+				Args: append(append([]string{}, tc.exportArgs...), tc.srcDir, tc.dstDir),
 				Getenv: func(name string) string {
 					switch name {
 					case "VARIANT_NAME":
@@ -309,11 +310,16 @@ func TestExport(t *testing.T) {
 					}
 					return "", fmt.Errorf("Unexpected call to getw")
 				},
-			})
+			}
 			var err error
 
 			go func() {
-				err = m.Run()
+				err = RunMain(env, func(m *Main) {
+					m.Stdout = outWrite
+					m.Stderr = os.Stderr
+					m.Getwd = env.Getwd
+					m.Getenv = env.Getenv
+				})
 				outWrite.Close()
 			}()
 

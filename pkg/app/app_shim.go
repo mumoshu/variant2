@@ -96,7 +96,7 @@ func main() {
 
 	bin := filepath.Base(os.Args[0])
 
-	err := variant.MustEval(bin, source).Run(args)
+	err := variant.MustLoad(variant.FromSource(bin, source)).Run(args)
 
 	var verr variant.Error
 

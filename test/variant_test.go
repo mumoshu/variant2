@@ -25,7 +25,7 @@ job "test" {
   }
 }
 `
-	err := variant.MustEval("myapp", source).Run([]string{"test"})
+	err := variant.MustLoad(variant.FromSource("myapp", source)).Run([]string{"test"})
 
 	if err != nil {
 		panic(err)
@@ -51,7 +51,7 @@ job "test" {
 }
 
 func TestNewFile(t *testing.T) {
-	myapp, err := variant.Load("../examples/simple/simple.variant")
+	myapp, err := variant.Load(variant.FromPath("../examples/simple/simple.variant"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestNewFile(t *testing.T) {
 }
 
 func TestExtensionWithGo(t *testing.T) {
-	myapp, err := variant.Load("../examples/simple/simple.variant")
+	myapp, err := variant.Load(variant.FromPath("../examples/simple/simple.variant"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestExtensionWithGo(t *testing.T) {
 }
 
 func TestNewDir(t *testing.T) {
-	myapp, err := variant.Load("../examples/simple")
+	myapp, err := variant.Load(variant.FromPath("../examples/simple"))
 	if err != nil {
 		panic(err)
 	}
@@ -254,7 +254,7 @@ func TestNewDir(t *testing.T) {
 }
 
 func TestNewDirCobra(t *testing.T) {
-	myapp, err := variant.Load("../examples/simple")
+	myapp, err := variant.Load(variant.FromPath("../examples/simple"))
 	if err != nil {
 		panic(err)
 	}

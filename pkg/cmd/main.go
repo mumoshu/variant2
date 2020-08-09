@@ -8,9 +8,11 @@ import (
 )
 
 func main() {
-	m := variant.New()
-
-	err := m.Run()
+	err := variant.RunMain(variant.Env{
+		Args:   os.Args,
+		Getenv: os.Getenv,
+		Getwd:  os.Getwd,
+	})
 
 	var verr variant.Error
 
