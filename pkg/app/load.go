@@ -24,19 +24,19 @@ type configurable struct {
 	Body hcl.Body
 }
 
-func (l hcl2Loader) loadFile(filenames ...string) (*configurable, map[string]*hcl.File, error) {
+func loadFiles(filenames ...string) (map[string][]byte, error) {
 	srcs := map[string][]byte{}
 
 	for _, filename := range filenames {
 		src, err := ioutil.ReadFile(filename)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		srcs[filename] = src
 	}
 
-	return l.loadSources(srcs)
+	return srcs, nil
 }
 
 func (l hcl2Loader) loadSources(srcs map[string][]byte) (*configurable, map[string]*hcl.File, error) {
@@ -98,7 +98,17 @@ func (t *configurable) HCL2Config() (*HCL2Config, error) {
 }
 
 func New(dir string) (*App, error) {
-	nameToFiles, cc, err := newConfigFromDir(dir)
+	fs, err := findVariantFiles(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	srcs, err := loadFiles(fs...)
+	if err != nil {
+		return nil, err
+	}
+
+	nameToFiles, cc, err := newConfigFromSources(srcs)
 
 	app := &App{
 		Files: nameToFiles,
@@ -127,7 +137,12 @@ func NewImportFunc(importBaseDir string) func(string) (*App, error) {
 }
 
 func NewFromFile(file string) (*App, error) {
-	nameToFiles, cc, err := newConfigFromFiles([]string{file})
+	srcs, err := loadFiles(file)
+	if err != nil {
+		return nil, err
+	}
+
+	nameToFiles, cc, err := newConfigFromSources(srcs)
 
 	app := &App{
 		Files: nameToFiles,
@@ -158,7 +173,7 @@ func NewFromSources(srcs map[string][]byte) (*App, error) {
 	return newApp(app, cc, NewImportFunc(""))
 }
 
-func newConfigFromDir(dirPathOrURL string) (map[string]*hcl.File, *HCL2Config, error) {
+func findVariantFiles(dirPathOrURL string) ([]string, error) {
 	var dir string
 
 	s := strings.Split(dirPathOrURL, "::")
@@ -168,12 +183,12 @@ func newConfigFromDir(dirPathOrURL string) (map[string]*hcl.File, *HCL2Config, e
 
 		u, err := url.Parse(s[1])
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		remote, err := depresolver.New(depresolver.Home(".variant2/cache"))
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		us := forcePrefix + "::" + u.String()
@@ -182,7 +197,7 @@ func newConfigFromDir(dirPathOrURL string) (map[string]*hcl.File, *HCL2Config, e
 
 		u2, err := depresolver.Parse(us)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		if u2.File != "" {
@@ -192,7 +207,7 @@ func newConfigFromDir(dirPathOrURL string) (map[string]*hcl.File, *HCL2Config, e
 		}
 
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		dir = cacheDir
@@ -202,26 +217,10 @@ func newConfigFromDir(dirPathOrURL string) (map[string]*hcl.File, *HCL2Config, e
 
 	files, err := conf.FindVariantFiles(dir)
 	if err != nil {
-		return map[string]*hcl.File{}, nil, fmt.Errorf("failed to get %s files: %v", conf.VariantFileExt, err)
+		return nil, fmt.Errorf("failed to get %s files: %v", conf.VariantFileExt, err)
 	}
 
-	return newConfigFromFiles(files)
-}
-
-func newConfigFromFiles(files []string) (map[string]*hcl.File, *HCL2Config, error) {
-	l := &hcl2Loader{
-		Parser: hclparse.NewParser(),
-	}
-
-	c, nameToFiles, err := l.loadFile(files...)
-
-	if err != nil {
-		return nameToFiles, nil, err
-	}
-
-	cc, err := c.HCL2Config()
-
-	return nameToFiles, cc, err
+	return files, nil
 }
 
 func newConfigFromSources(srcs map[string][]byte) (map[string]*hcl.File, *HCL2Config, error) {

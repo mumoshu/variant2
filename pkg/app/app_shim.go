@@ -52,7 +52,17 @@ func (app *App) ExportGo(srcDir, dstDir string) error {
 		return err
 	}
 
-	files, _, err := newConfigFromDir(srcDir)
+	fs, err := findVariantFiles(srcDir)
+	if err != nil {
+		return err
+	}
+
+	srcs, err := loadFiles(fs...)
+	if err != nil {
+		return err
+	}
+
+	files, _, err := newConfigFromSources(srcs)
 	if err != nil {
 		return err
 	}
@@ -124,7 +134,17 @@ func (app *App) ExportShim(srcDir, dstDir string) error {
 		return err
 	}
 
-	files, _, err := newConfigFromDir(srcDir)
+	fs, err := findVariantFiles(srcDir)
+	if err != nil {
+		return err
+	}
+
+	srcs, err := loadFiles(fs...)
+	if err != nil {
+		return err
+	}
+
+	files, _, err := newConfigFromSources(srcs)
 	if err != nil {
 		return err
 	}
