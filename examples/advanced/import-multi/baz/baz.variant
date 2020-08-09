@@ -1,0 +1,10 @@
+job "baz" {
+  parameter "message" {
+    type = string
+  }
+
+  exec {
+    command = "echo"
+    args= [param.message]
+  }
+}

@@ -1,0 +1,16 @@
+job "foo" {
+  imports = [
+    "git::ssh://git@github.com/mumoshu/variant2@examples/advanced/import/foo?ref=master",
+    "baz"
+  ]
+}
+
+job "test" {
+  run "foo bar" {
+    message = "message1"
+  }
+
+  run "foo baz" {
+    message = "message2"
+  }
+}
