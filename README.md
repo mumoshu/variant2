@@ -238,7 +238,9 @@ job "baz" {
 }
 ```
 
-Okay that works. But you ended up too many files in a single directory? `import = "path/to/dir"` can be used to load all the `*.variant` files in the directory into the current `job`.
+Okay that works. But you ended up too many files in a single directory?
+
+A "parent" variant file containing `import` or `imports` can be used to load all the `*.variant` files in the directory into the current `job`.
 
 `path/to/yourcmd.variant`:
 ```hcl
@@ -259,6 +261,14 @@ parameter "param1" {
 
 # snip
 ```
+
+Note that `imports` is the newer variant of `import` that supports multiple sources to be imported.
+
+Also, you can import following sources:
+
+- Relative path to local directory (A local path that doesn't start with `/`, like `foo/bar`)
+- Absolute path to local directory (An absolute path that starts with `/`, like `/variant/modules/example.com/foo/bar`)
+- URLs to Git repository (`REPO_URL@PATH/TO/DIR?ref=BRANCH`, e.g. `git::ssh://git@github.com/mumoshu/variant2@examples/advanced/import/foo?ref=master`)
 
 See the [import](/examples/advanced/import) example for the full declaration of this command for reference.
 

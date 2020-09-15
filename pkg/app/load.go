@@ -165,20 +165,24 @@ func New(setup Setup) (*App, error) {
 		return app, err
 	}
 
-	return newApp(app, cc, NewImportFunc(instance.Dir))
+	return newApp(app, cc, NewImportFunc(instance.Dir, func(path string) (*App, error) {
+		return New(FromDir(path))
+	}))
 }
 
-func NewImportFunc(importBaseDir string) func(string) (*App, error) {
+func NewImportFunc(importBaseDir string, f func(string) (*App, error)) func(string) (*App, error) {
 	return func(dir string) (*App, error) {
 		var d string
 
 		if strings.Contains(dir, ":") {
 			d = dir
+		} else if dir[0] == '/' {
+			d = dir
 		} else {
 			d = filepath.Join(importBaseDir, dir)
 		}
 
-		return New(FromDir(d))
+		return f(d)
 	}
 }
 
