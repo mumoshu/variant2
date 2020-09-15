@@ -290,6 +290,8 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 						// their types MUST match.
 						merged := mergeJobs(importedJob, j)
 
+						merged.Name = ""
+
 						importedJob = *merged
 					}
 
@@ -321,6 +323,14 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 	app.Config = conf
 
 	app.JobByName = jobByName
+
+	var newJobs []JobSpec
+
+	for _, j := range app.JobByName {
+		newJobs = append(newJobs, j)
+	}
+
+	app.Config.Jobs = newJobs
 
 	return app, nil
 }

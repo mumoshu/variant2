@@ -140,6 +140,13 @@ func TestExamples(t *testing.T) {
 			wd:          "./examples/advanced/import",
 		},
 		{
+			subject:     "import/shebang",
+			variantName: "",
+			args:        []string{"variant", "./examples/advanced/import/mycli", "foo", "bar", "HELLO"},
+			wd:          "./examples/advanced/import",
+			expectOut:   "HELLO\n",
+		},
+		{
 			subject:     "import-multi",
 			variantName: "",
 			args:        []string{"variant", "test"},
@@ -209,9 +216,13 @@ func TestExamples(t *testing.T) {
 		},
 	}
 
-	for i := range testcases {
+	for idx := range testcases {
+		i := idx
 		tc := testcases[i]
+
 		t.Run(fmt.Sprintf("%d: %s", i, tc.subject), func(t *testing.T) {
+			t.Logf("Running subtest: %d %s", i, tc.subject)
+
 			outRead, outWrite := io.Pipe()
 			env := Env{
 				Args: tc.args,
