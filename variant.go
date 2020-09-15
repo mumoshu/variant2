@@ -140,9 +140,7 @@ func GetPathAndArgsFromEnv(env Env) (string, string, []string) {
 		info, err := os.Stat(file)
 
 		if err == nil && info != nil && !info.IsDir() {
-			if len(osArgs) > 2 {
-				osArgs = osArgs[2:]
-			}
+			osArgs = osArgs[2:]
 
 			path = file
 			cmd = filepath.Base(file)
