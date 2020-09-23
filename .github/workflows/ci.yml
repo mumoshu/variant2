@@ -1,7 +1,33 @@
 name: Go
 on: [push]
 jobs:
-  build:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go:
+        - 1.13.4
+    name: Go ${{ matrix.go }} build
+    steps:
+    - uses: actions/checkout@master
+    - name: Setup Go
+      uses: actions/setup-go@v1
+      with:
+        version: ${{ matrix.go }}
+    - name: Run go mod download
+      run: go mod download
+    - name: Install SSH key
+      uses: shimataro/ssh-key-action@v2
+      with:
+        key: ${{ secrets.SSH_KEY }}
+        known_hosts: ${{ secrets.KNOWN_HOSTS }}
+    - name: Run tests
+      run: |
+        which kubectl
+        sudo apt-get update -y
+        sudo apt-get install ruby -y
+        make test smoke
+  lint:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -18,14 +44,3 @@ jobs:
       run: go mod download
     - name: Run golangci-lint
       run: make lint
-    - name: Install SSH key
-      uses: shimataro/ssh-key-action@v2
-      with:
-        key: ${{ secrets.SSH_KEY }}
-        known_hosts: ${{ secrets.KNOWN_HOSTS }}
-    - name: Run tests
-      run: |
-        which kubectl
-        sudo apt-get update -y
-        sudo apt-get install ruby -y
-        make test smoke

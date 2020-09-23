@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -140,6 +142,13 @@ func TestExamples(t *testing.T) {
 			wd:          "./examples/advanced/import",
 		},
 		{
+			subject:     "import/shebang",
+			variantName: "",
+			args:        []string{"variant", "./examples/advanced/import/mycli", "foo", "bar", "HELLO"},
+			wd:          "./examples/advanced/import",
+			expectOut:   "HELLO\n",
+		},
+		{
 			subject:     "import-multi",
 			variantName: "",
 			args:        []string{"variant", "test"},
@@ -209,10 +218,15 @@ func TestExamples(t *testing.T) {
 		},
 	}
 
-	for i := range testcases {
+	for idx := range testcases {
+		i := idx
 		tc := testcases[i]
+
 		t.Run(fmt.Sprintf("%d: %s", i, tc.subject), func(t *testing.T) {
+			t.Logf("Running subtest: %d %s", i, tc.subject)
+
 			outRead, outWrite := io.Pipe()
+			errRead, errWrite := io.Pipe()
 			env := Env{
 				Args: tc.args,
 				Getenv: func(name string) string {
@@ -237,27 +251,52 @@ func TestExamples(t *testing.T) {
 			go func() {
 				err = RunMain(env, func(m *Main) {
 					m.Stdout = outWrite
-					m.Stderr = os.Stderr
+					m.Stderr = errWrite
 					m.Getenv = env.Getenv
 					m.Getwd = env.Getwd
 				})
 				outWrite.Close()
+				errWrite.Close()
 			}()
 
-			buf := new(bytes.Buffer)
-			if _, err := buf.ReadFrom(outRead); err != nil {
+			var out, errOut string
+
+			eg := &errgroup.Group{}
+
+			eg.Go(func() error {
+				outBuf := new(bytes.Buffer)
+				if _, err := outBuf.ReadFrom(outRead); err != nil {
+					return fmt.Errorf("reading stdout: %w", err)
+				}
+
+				out = outBuf.String()
+
+				return nil
+			})
+
+			eg.Go(func() error {
+				errBuf := new(bytes.Buffer)
+				if _, err := errBuf.ReadFrom(errRead); err != nil {
+					return fmt.Errorf("reading stderr: %w", err)
+				}
+
+				errOut = errBuf.String()
+
+				return nil
+			})
+
+			if err := eg.Wait(); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			out := buf.String()
 
 			if tc.expectErr != "" {
 				if err == nil {
 					t.Fatalf("Expected error didn't occur")
 				} else if err.Error() != tc.expectErr {
-					t.Fatalf("Unexpected error: want %q, got %q", tc.expectErr, err.Error())
+					t.Fatalf("Unexpected error: want %q, got %q\n%s", tc.expectErr, err.Error(), errOut)
 				}
 			} else if err != nil {
-				t.Fatalf("%+v", err)
+				t.Fatalf("%+v\n%s", err, errOut)
 			}
 
 			if tc.expectOut != "" {
