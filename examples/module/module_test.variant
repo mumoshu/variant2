@@ -2,7 +2,7 @@
 test "test" {
   case "ok" {
     out = trimspace(<<EOS
-version.BuildInfo{Version:"v3.0.0", GitCommit:"e29ce2a54e96cd02ccfce88bee4f58bb6e2a28b6", GitTreeState:"clean", GoVersion:"go1.13.4"}
+version.BuildInfo{Version:"v3.2.0", GitCommit:"e11b7ce3b12db2941e90399e874513fbd24bcb71", GitTreeState:"clean", GoVersion:"go1.13.10"}
 EOS
     )
     exitstatus = 0
@@ -25,7 +25,7 @@ test "build" {
     out = trimspace(<<EOS
 FROM alpine:3.10
 
-ARG HELM_VERSION=3.0.0
+ARG HELM_VERSION=3.2.0
 ARG HELM_FILENAME="helm-$${HELM_VERSION}-linux-amd64.tar.gz"
 
 ADD http://storage.googleapis.com/kubernetes-helm/$${HELM_FILE_NAME} /tmp

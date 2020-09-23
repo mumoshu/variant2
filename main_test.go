@@ -224,6 +224,7 @@ func TestExamples(t *testing.T) {
 			t.Logf("Running subtest: %d %s", i, tc.subject)
 
 			outRead, outWrite := io.Pipe()
+			errRead, errWrite := io.Pipe()
 			env := Env{
 				Args: tc.args,
 				Getenv: func(name string) string {
@@ -248,27 +249,34 @@ func TestExamples(t *testing.T) {
 			go func() {
 				err = RunMain(env, func(m *Main) {
 					m.Stdout = outWrite
-					m.Stderr = os.Stderr
+					m.Stderr = errWrite
 					m.Getenv = env.Getenv
 					m.Getwd = env.Getwd
 				})
 				outWrite.Close()
+				errWrite.Close()
 			}()
 
-			buf := new(bytes.Buffer)
-			if _, err := buf.ReadFrom(outRead); err != nil {
+			outBuf := new(bytes.Buffer)
+			if _, err := outBuf.ReadFrom(outRead); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			out := buf.String()
+			out := outBuf.String()
+
+			errBuf := new(bytes.Buffer)
+			if _, err := errBuf.ReadFrom(errRead); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			errOut := errBuf.String()
 
 			if tc.expectErr != "" {
 				if err == nil {
 					t.Fatalf("Expected error didn't occur")
 				} else if err.Error() != tc.expectErr {
-					t.Fatalf("Unexpected error: want %q, got %q", tc.expectErr, err.Error())
+					t.Fatalf("Unexpected error: want %q, got %q\n%s", tc.expectErr, err.Error(), errOut)
 				}
 			} else if err != nil {
-				t.Fatalf("%+v", err)
+				t.Fatalf("%+v\n%s", err, errOut)
 			}
 
 			if tc.expectOut != "" {

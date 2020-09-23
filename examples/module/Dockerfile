@@ -1,6 +1,6 @@
 FROM alpine:3.10
 
-ARG HELM_VERSION=3.0.0
+ARG HELM_VERSION=3.2.0
 ARG HELM_FILENAME="helm-${HELM_VERSION}-linux-amd64.tar.gz"
 
 ADD http://storage.googleapis.com/kubernetes-helm/${HELM_FILE_NAME} /tmp

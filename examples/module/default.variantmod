@@ -1,7 +1,7 @@
 module "default" {
   dependency "github_release" "helm" {
     source = "helm/helm"
-    version = "> 1.0.0, < 3.0.1"
+    version = ">= 3.0.0, < 3.2.1"
   }
 
   file "Dockerfile" {
