@@ -1,0 +1,10 @@
+option "project-dir" {
+  # The default works from geodesic shell `projects` folder
+  default = "./overridedir"
+  description = "Terraform projects directory"
+  type = string
+}
+
+job "nested" {
+  import = "lib"
+}

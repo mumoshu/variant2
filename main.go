@@ -1,5 +1,7 @@
 package variant
 
+import "fmt"
+
 func RunMain(env Env, opts ...Option) error {
 	cmd, path, args := GetPathAndArgsFromEnv(env)
 
@@ -11,7 +13,7 @@ func RunMain(env Env, opts ...Option) error {
 		}
 	}))
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("loading command: %w", err)
 	}
 
 	return m.Run(args, RunOptions{DisableLocking: false})

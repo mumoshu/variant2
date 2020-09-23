@@ -1,0 +1,16 @@
+option "project-dir" {
+  description = "Terraform projects directory"
+  default = "./defaultdir"
+  type = string
+}
+
+job "terraform plan" {
+  parameter "project" {
+    type = string
+  }
+
+  exec {
+    command = "bash"
+    args    = ["-c", "echo ${opt.project-dir}/${param.project}"]
+  }
+}

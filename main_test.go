@@ -155,6 +155,27 @@ func TestExamples(t *testing.T) {
 			wd:          "./examples/advanced/import-multi",
 		},
 		{
+			subject:     "nested-import-global-propagation",
+			args:        []string{"variant", "run", "nested", "terraform", "plan", "project"},
+			variantName: "",
+			wd:          "./examples/advanced/nested-import-global-propagation",
+			expectOut:   "./overridedir/project\n",
+		},
+		{
+			subject:     "nested-import-global-propagation-default",
+			args:        []string{"variant", "run", "nested", "terraform", "plan", "project"},
+			variantName: "",
+			wd:          "./examples/advanced/nested-import-global-propagation-default",
+			expectOut:   "./defaultdir/project\n",
+		},
+		{
+			subject:     "nested-import-global-propagation-incompatible-type",
+			args:        []string{"variant", "run", "nested", "terraform", "plan", "project"},
+			variantName: "",
+			wd:          "./examples/advanced/nested-import-global-propagation-incompatible-type",
+			expectErr:   "loading command: merging globals: imported job \"\" has incompatible option \"project-dir\": needs type of cty.Number, encountered cty.String",
+		},
+		{
 			subject:     "options",
 			variantName: "",
 			args:        []string{"variant", "test"},
@@ -292,8 +313,8 @@ func TestExamples(t *testing.T) {
 			if tc.expectErr != "" {
 				if err == nil {
 					t.Fatalf("Expected error didn't occur")
-				} else if err.Error() != tc.expectErr {
-					t.Fatalf("Unexpected error: want %q, got %q\n%s", tc.expectErr, err.Error(), errOut)
+				} else if d := cmp.Diff(tc.expectErr, err.Error()); d != "" {
+					t.Fatalf("Unexpected error:\nDIFF:\n%s\nSTDERR:\n%s", d, errOut)
 				}
 			} else if err != nil {
 				t.Fatalf("%+v\n%s", err, errOut)
