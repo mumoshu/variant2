@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -257,17 +259,35 @@ func TestExamples(t *testing.T) {
 				errWrite.Close()
 			}()
 
-			outBuf := new(bytes.Buffer)
-			if _, err := outBuf.ReadFrom(outRead); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			out := outBuf.String()
+			var out, errOut string
 
-			errBuf := new(bytes.Buffer)
-			if _, err := errBuf.ReadFrom(errRead); err != nil {
+			eg := &errgroup.Group{}
+
+			eg.Go(func() error {
+				outBuf := new(bytes.Buffer)
+				if _, err := outBuf.ReadFrom(outRead); err != nil {
+					return fmt.Errorf("reading stdout: %w", err)
+				}
+
+				out = outBuf.String()
+
+				return nil
+			})
+
+			eg.Go(func() error {
+				errBuf := new(bytes.Buffer)
+				if _, err := errBuf.ReadFrom(errRead); err != nil {
+					return fmt.Errorf("reading stderr: %w", err)
+				}
+
+				errOut = errBuf.String()
+
+				return nil
+			})
+
+			if err := eg.Wait(); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			errOut := errBuf.String()
 
 			if tc.expectErr != "" {
 				if err == nil {
