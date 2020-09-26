@@ -149,6 +149,8 @@ Head over to the following per-topic sections for more features:
 - [Debugging Commands](#debugging-commands) to learn how to debug your Variant command
 - [Writing Tests](#writing-tests) to learn the Variant DSL for writing tests
 - [Generating Shims](#generating-shims) to make your Variant command look native
+- [Compiling Command](#compiling-command) to export Go source or an executable binary
+- [Running Command From Other Directory](#running-command-from-another-directory)
 - [Concurrency](#concurrency) section to make `kubectl` and `helm` concurrent so that the installation time becomes minimal
 - [Log Collection](#log-collection) to filter and forward log of commands and the arguments passed to them along with their outputs
 - Use [Split, Merge and Import](#split-merge-and-import) to split, compose and tidy Variant commands
@@ -188,6 +190,52 @@ Flags:
 
 Use "getting-started [command] --help" for more information about a command.
 ```
+
+## Compiling Command
+
+As we've covered in the [Getting Started](#getting-started) guide, `variant export` sub-commands can be used to export
+your command in various formats.
+
+`variant export binary SRC CMD` generates an executable binary at the path `CMD` from your command defined under the
+directory `SRC`:
+
+```console
+$ variant export binary ./ build/myapp
+```
+
+The exported executable binary accepts the same arguments as `variant run`.
+So `myapp -h` corresponds to `cd $SRC; variant run -h`, while
+`myapp run deploy` corresponds to `cd $SRC; variant run deploy`.
+
+`variant export go SRC/CMD PKG` generates a directory at `PKG/CMD` that contains Go source files that can be built by
+running `go build PKG/CMD`.
+
+Assuming you already have `go` installed, you can run `variint export go src/myapp build`, then edit code under
+`build/myapp` to make any customization that can't be done with [shims](#generating-shims), and finally build
+an executable with `go build -o myapp ./build/myapp`.
+
+## Running Command From Other Directory
+
+Usually, when your command has been defined under the directory `path/to/your/command`, `variant run` requires you to `chdir` to
+it before running.
+
+To be clear, `cd $SRC; variant run` can be used to run it from another directory. However with that you command cannot
+access the actual current directory, as you've already `cd`ed.
+
+You can also use a [shim](#generating-shims) or an [exported binary](#compiling-command) to make it runnable from any
+directory. But it takes some time so probably you'd like to run it from any directory without a `variant export` step
+while developing?
+
+The `VARIANT_DIR` environment variable might be the solution. When `variant` recognizes it, it reads the command from the directory
+specified by it.
+
+Just run:
+
+```console
+VARIANT_DIR=$SRC variant run
+```
+
+Your command can now be run without `cd` and still has access to the current directory.
 
 ## Split, Merge and Import
 
