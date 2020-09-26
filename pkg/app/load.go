@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/hashicorp/hcl/v2/ext/typeexpr"
+
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hclparse"
@@ -257,6 +259,8 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 
 	var conf *HCL2Config
 
+	var globals []JobSpec
+
 	jobByName := map[string]JobSpec{}
 	for _, j := range jobs {
 		jobByName[j.Name] = j
@@ -288,7 +292,10 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 						//
 						// If the user-side has a global parameter/option that has the same name as the library-side,
 						// their types MUST match.
-						merged := mergeJobs(importedJob, j)
+						merged, err := mergeParamsAndOpts(importedJob, j)
+						if err != nil {
+							return nil, fmt.Errorf("merging globals: %w", err)
+						}
 
 						merged.Name = ""
 
@@ -302,6 +309,9 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 					} else {
 						// Import the top-level job in the library as the non-top-level job on the user side
 						newJobName = j.Name
+
+						// And merge global parameters and options
+						globals = append(globals, importedJob)
 					}
 
 					importedJob.Name = newJobName
@@ -316,11 +326,26 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 		}
 	}
 
+	root := jobByName[""]
+
+	for _, g := range globals {
+		merged, err := mergeParamsAndOpts(g, root)
+		if err != nil {
+			return nil, fmt.Errorf("merging globals: %w", err)
+		}
+
+		root = *merged
+	}
+
+	jobByName[""] = root
+
 	if conf == nil {
 		conf = cc
 	}
 
 	app.Config = conf
+
+	app.Config.JobSpec = root
 
 	app.JobByName = jobByName
 
@@ -335,7 +360,7 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 	return app, nil
 }
 
-func mergeJobs(src JobSpec, dst JobSpec) *JobSpec {
+func mergeParamsAndOpts(src JobSpec, dst JobSpec) (*JobSpec, error) {
 	paramMap := map[string]Parameter{}
 	optMap := map[string]OptionSpec{}
 
@@ -348,14 +373,38 @@ func mergeJobs(src JobSpec, dst JobSpec) *JobSpec {
 	}
 
 	for _, p := range src.Parameters {
-		if _, exists := paramMap[p.Name]; !exists {
+		if existing, exists := paramMap[p.Name]; !exists {
 			paramMap[p.Name] = p
+		} else {
+			exTy, err := typeexpr.TypeConstraint(existing.Type)
+			if err != nil {
+				return nil, fmt.Errorf("parsing parameter type: %w", err)
+			}
+			toTy, err := typeexpr.TypeConstraint(p.Type)
+			if err != nil {
+				return nil, fmt.Errorf("parsing parameter type: %w", err)
+			}
+			if exTy != toTy {
+				return nil, fmt.Errorf("imported job %q has incompatible parameter %q: needs type of %v, encountered %v", src.Name, p.Name, exTy.GoString(), toTy.GoString())
+			}
 		}
 	}
 
 	for _, o := range src.Options {
-		if _, exists := optMap[o.Name]; !exists {
+		if existing, exists := optMap[o.Name]; !exists {
 			optMap[o.Name] = o
+		} else {
+			exTy, err := typeexpr.TypeConstraint(existing.Type)
+			if err != nil {
+				return nil, fmt.Errorf("parsing option type: %w", err)
+			}
+			toTy, err := typeexpr.TypeConstraint(o.Type)
+			if err != nil {
+				return nil, fmt.Errorf("parsing option type: %w", err)
+			}
+			if exTy != toTy {
+				return nil, fmt.Errorf("imported job %q has incompatible option %q: needs type of %v, encountered %v", src.Name, o.Name, exTy.GoString(), toTy.GoString())
+			}
 		}
 	}
 
@@ -375,5 +424,5 @@ func mergeJobs(src JobSpec, dst JobSpec) *JobSpec {
 	dst.Parameters = params
 	dst.Options = opts
 
-	return &dst
+	return &dst, nil
 }

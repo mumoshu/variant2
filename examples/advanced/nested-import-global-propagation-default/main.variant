@@ -1,0 +1,3 @@
+job "nested" {
+  import = "lib"
+}
