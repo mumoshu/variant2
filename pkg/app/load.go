@@ -254,7 +254,7 @@ func newConfigFromSources(srcs map[string][]byte) (map[string]*hcl.File, *HCL2Co
 	return nameToFiles, cc, err
 }
 
-func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*App, error) {
+func processImports(cc *HCL2Config, importDir func(string) (*App, error)) (*HCL2Config, map[string]JobSpec, error) {
 	jobs := append([]JobSpec{cc.JobSpec}, cc.Jobs...)
 
 	var conf *HCL2Config
@@ -280,7 +280,7 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 				a, err := importDir(src)
 
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 
 				importedJobs := append([]JobSpec{a.Config.JobSpec}, a.Config.Jobs...)
@@ -294,7 +294,7 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 						// their types MUST match.
 						merged, err := mergeParamsAndOpts(importedJob, j)
 						if err != nil {
-							return nil, fmt.Errorf("merging globals: %w", err)
+							return nil, nil, fmt.Errorf("merging globals: %w", err)
 						}
 
 						merged.Name = ""
@@ -331,7 +331,7 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 	for _, g := range globals {
 		merged, err := mergeParamsAndOpts(g, root)
 		if err != nil {
-			return nil, fmt.Errorf("merging globals: %w", err)
+			return nil, nil, fmt.Errorf("merging globals: %w", err)
 		}
 
 		root = *merged
@@ -343,9 +343,18 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 		conf = cc
 	}
 
+	return conf, jobByName, nil
+}
+
+func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*App, error) {
+	conf, jobByName, err := processImports(cc, importDir)
+	if err != nil {
+		return nil, fmt.Errorf("processing imports: %w", err)
+	}
+
 	app.Config = conf
 
-	app.Config.JobSpec = root
+	app.Config.JobSpec = jobByName[""]
 
 	app.JobByName = jobByName
 
