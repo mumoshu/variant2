@@ -1,8 +1,9 @@
 package conf
 
 import (
-	"os"
 	"path/filepath"
+
+	"github.com/mumoshu/variant2/pkg/fs"
 )
 
 const (
@@ -11,19 +12,19 @@ const (
 
 // FindVariantFiles walks the given path and returns the files ending whose ext is .variant
 // Also, it returns the path if the path is just a file and a HCL file
-func FindVariantFiles(path string) ([]string, error) {
+func FindVariantFiles(fs *fs.FileSystem, path string) ([]string, error) {
 	var (
 		files []string
 		err   error
 	)
 
-	fi, err := os.Stat(path)
+	fi, err := fs.Stat(path)
 	if err != nil {
 		return files, err
 	}
 
 	if fi.IsDir() {
-		found, err := filepath.Glob(filepath.Join(path, "*"+VariantFileExt+"*"))
+		found, err := fs.Glob(filepath.Join(path, "*"+VariantFileExt+"*"))
 		if err != nil {
 			return nil, err
 		}
@@ -35,7 +36,7 @@ func FindVariantFiles(path string) ([]string, error) {
 				continue
 			}
 
-			info, err := os.Stat(f)
+			info, err := fs.Stat(f)
 
 			if err != nil {
 				return nil, err

@@ -5,3 +5,4 @@ variant
 bin/golangci-lint
 bin/goimports
 \#*#
+.variant2

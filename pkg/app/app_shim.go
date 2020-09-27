@@ -3,10 +3,13 @@ package app
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/mumoshu/variant2/pkg/fs"
 
 	"github.com/hashicorp/hcl/v2"
 
@@ -38,7 +41,7 @@ func (app *App) ExportBinary(srcDir, dstFile string) error {
 	_, err = app.execCmd(
 		Command{
 			Name: "sh",
-			Args: []string{"-c", fmt.Sprintf("cd %s; go mod init %s && go build -o %s %s", tmpDir, filepath.Base(srcDir), absDstFile, tmpDir)},
+			Args: []string{"-c", fmt.Sprintf("cd %s; go build -o %s %s", tmpDir, absDstFile, tmpDir)},
 			Env:  map[string]string{},
 		},
 		true,
@@ -52,22 +55,12 @@ func (app *App) ExportGo(srcDir, dstDir string) error {
 		return err
 	}
 
-	fs, err := findVariantFiles(srcDir)
+	a, err := New(FromDir(srcDir))
 	if err != nil {
 		return err
 	}
 
-	srcs, err := loadFiles(fs...)
-	if err != nil {
-		return err
-	}
-
-	files, _, err := newConfigFromSources(srcs)
-	if err != nil {
-		return err
-	}
-
-	merged, err := merge(files)
+	merged, err := merge(a.Files)
 	if err != nil {
 		return err
 	}
@@ -83,6 +76,7 @@ import (
 	"strings"
 
 	variant "github.com/mumoshu/variant2"
+	_ "${MODULE_NAME}/statik"
 )
 
 func main() {
@@ -116,6 +110,11 @@ func main() {
 }
 `, "`"+strings.Replace(string(merged)+"\n", "`", backquote, -1)+"`"))
 
+	moduleName := app.moduleName(srcDir)
+
+	replaced := strings.ReplaceAll(string(code), "${MODULE_NAME}", moduleName)
+	code = []byte(replaced)
+
 	if err := os.MkdirAll(dstDir, 0755); err != nil {
 		return err
 	}
@@ -126,7 +125,100 @@ func main() {
 		return err
 	}
 
+	walkErr := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return fmt.Errorf("walking into %s: %w", path, err)
+		}
+
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return fmt.Errorf("computing path of %s relative to %s: %w", path, srcDir, err)
+		}
+
+		abs := filepath.Join(dstDir, fs.VendorPrefix, rel)
+
+		if info.IsDir() {
+			return os.MkdirAll(abs, 0755)
+		}
+
+		return copyFile(path, abs)
+	})
+	if walkErr != nil {
+		return fmt.Errorf("copying files from %s: %w", srcDir, walkErr)
+	}
+
+	_, err = app.execCmd(
+		Command{
+			Name: "sh",
+			Args: []string{"-c", fmt.Sprintf("cd %s; go mod init %s && go get github.com/rakyll/statik && statik -src=%s", dstDir, moduleName, fs.VendorPrefix)},
+			Env:  map[string]string{},
+		},
+		true,
+	)
+	if err != nil {
+		return err
+	}
+
+	variantVer := os.Getenv("VARIANT_BUILD_VER")
+	if variantVer != "" {
+		_, err = app.execCmd(
+			Command{
+				Name: "sh",
+				Args: []string{"-c", fmt.Sprintf("cd %s; go mod edit -require=github.com/mumoshu/variant2@%s", dstDir, variantVer)},
+				Env:  map[string]string{},
+			},
+			true,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	variantReplace := os.Getenv("VARIANT_BUILD_REPLACE")
+	if variantReplace != "" {
+		_, err = app.execCmd(
+			Command{
+				Name: "sh",
+				Args: []string{"-c", fmt.Sprintf("cd %s; go mod edit -replace github.com/mumoshu/variant2@%s=%s", dstDir, variantVer, variantReplace)},
+				Env:  map[string]string{},
+			},
+			true,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+func copyFile(src, dst string) (err error) {
+	in, err := os.Open(src)
+	if err != nil {
+		return
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return
+	}
+
+	defer func() {
+		cerr := out.Close()
+
+		if err == nil {
+			err = cerr
+		}
+	}()
+
+	if _, err = io.Copy(out, in); err != nil {
+		return
+	}
+
+	err = out.Sync()
+
+	return
 }
 
 func (app *App) ExportShim(srcDir, dstDir string) error {
@@ -134,17 +226,7 @@ func (app *App) ExportShim(srcDir, dstDir string) error {
 		return err
 	}
 
-	fs, err := findVariantFiles(srcDir)
-	if err != nil {
-		return err
-	}
-
-	srcs, err := loadFiles(fs...)
-	if err != nil {
-		return err
-	}
-
-	files, _, err := newConfigFromSources(srcs)
+	a, err := New(FromDir(srcDir))
 	if err != nil {
 		return err
 	}
@@ -156,7 +238,7 @@ func (app *App) ExportShim(srcDir, dstDir string) error {
 		binName = "variant"
 	}
 
-	return exportWithShim(binName, files, dstDir)
+	return exportWithShim(binName, a.Files, dstDir)
 }
 
 func merge(files map[string]*hcl.File) ([]byte, error) {

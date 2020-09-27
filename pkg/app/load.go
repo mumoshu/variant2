@@ -2,11 +2,12 @@ package app
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+
+	fs2 "github.com/mumoshu/variant2/pkg/fs"
 
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 
@@ -26,11 +27,11 @@ type configurable struct {
 	Body hcl.Body
 }
 
-func loadFiles(filenames ...string) (map[string][]byte, error) {
+func loadFiles(fs *fs2.FileSystem, filenames ...string) (map[string][]byte, error) {
 	srcs := map[string][]byte{}
 
 	for _, filename := range filenames {
-		src, err := ioutil.ReadFile(filename)
+		src, err := fs.ReadFile(filename)
 		if err != nil {
 			return nil, err
 		}
@@ -108,7 +109,9 @@ type Setup func() (*Instance, error)
 
 func FromFile(path string) Setup {
 	return func() (*Instance, error) {
-		srcs, err := loadFiles(path)
+		fs := &fs2.FileSystem{}
+
+		srcs, err := loadFiles(fs, path)
 		if err != nil {
 			return nil, err
 		}
@@ -124,12 +127,14 @@ func FromFile(path string) Setup {
 
 func FromDir(dir string) Setup {
 	return func() (*Instance, error) {
-		fs, err := findVariantFiles(dir)
+		fs := &fs2.FileSystem{}
+
+		files, err := findVariantFiles(fs, dir)
 		if err != nil {
 			return nil, err
 		}
 
-		srcs, err := loadFiles(fs...)
+		srcs, err := loadFiles(fs, files...)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +193,7 @@ func NewImportFunc(importBaseDir string, f func(string) (*App, error)) func(stri
 	}
 }
 
-func findVariantFiles(dirPathOrURL string) ([]string, error) {
+func findVariantFiles(fs *fs2.FileSystem, dirPathOrURL string) ([]string, error) {
 	var dir string
 
 	s := strings.Split(dirPathOrURL, "::")
@@ -230,7 +235,7 @@ func findVariantFiles(dirPathOrURL string) ([]string, error) {
 		dir = dirPathOrURL
 	}
 
-	files, err := conf.FindVariantFiles(dir)
+	files, err := conf.FindVariantFiles(fs, dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get %s files: %v", conf.VariantFileExt, err)
 	}
