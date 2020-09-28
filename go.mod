@@ -22,6 +22,7 @@ require (
 	github.com/mattn/go-isatty v0.0.12
 	github.com/nlopes/slack v0.6.0
 	github.com/pkg/errors v0.9.1
+	github.com/rakyll/statik v0.1.7
 	github.com/rs/xid v1.2.1
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5 // indirect
@@ -38,7 +39,7 @@ require (
 	github.com/zclconf/go-cty-yaml v1.0.1
 	golang.org/x/crypto v0.0.0-20200214034016-1d94cc7ab1c6 // indirect
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
-	golang.org/x/tools v0.0.0-20200331025713-a30bf2db82d4
+	golang.org/x/tools v0.0.0-20200331025713-a30bf2db82d4 // indirect
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c

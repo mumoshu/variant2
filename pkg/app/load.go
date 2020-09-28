@@ -2,11 +2,12 @@ package app
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+
+	fs2 "github.com/mumoshu/variant2/pkg/fs"
 
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 
@@ -18,6 +19,10 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+const (
+	DefaultCacheDir = ".variant2/cache"
+)
+
 type hcl2Loader struct {
 	Parser *hclparse.Parser
 }
@@ -26,11 +31,11 @@ type configurable struct {
 	Body hcl.Body
 }
 
-func loadFiles(filenames ...string) (map[string][]byte, error) {
+func loadFiles(fs *fs2.FileSystem, filenames ...string) (map[string][]byte, error) {
 	srcs := map[string][]byte{}
 
 	for _, filename := range filenames {
-		src, err := ioutil.ReadFile(filename)
+		src, err := fs.ReadFile(filename)
 		if err != nil {
 			return nil, err
 		}
@@ -104,11 +109,13 @@ type Instance struct {
 	Dir     string
 }
 
-type Setup func() (*Instance, error)
+type Setup func(*Options) (*Instance, error)
 
 func FromFile(path string) Setup {
-	return func() (*Instance, error) {
-		srcs, err := loadFiles(path)
+	return func(_ *Options) (*Instance, error) {
+		fs := &fs2.FileSystem{}
+
+		srcs, err := loadFiles(fs, path)
 		if err != nil {
 			return nil, err
 		}
@@ -123,13 +130,15 @@ func FromFile(path string) Setup {
 }
 
 func FromDir(dir string) Setup {
-	return func() (*Instance, error) {
-		fs, err := findVariantFiles(dir)
+	return func(options *Options) (*Instance, error) {
+		fs := &fs2.FileSystem{}
+
+		files, err := findVariantFiles(fs, options.CacheDir, dir)
 		if err != nil {
 			return nil, err
 		}
 
-		srcs, err := loadFiles(fs...)
+		srcs, err := loadFiles(fs, files...)
 		if err != nil {
 			return nil, err
 		}
@@ -142,7 +151,7 @@ func FromDir(dir string) Setup {
 }
 
 func FromSources(srcs map[string][]byte) Setup {
-	return func() (*Instance, error) {
+	return func(_ *Options) (*Instance, error) {
 		return &Instance{
 			Sources: srcs,
 			Dir:     "",
@@ -150,8 +159,26 @@ func FromSources(srcs map[string][]byte) Setup {
 	}
 }
 
-func New(setup Setup) (*App, error) {
-	instance, err := setup()
+type Options struct {
+	CacheDir string
+}
+
+type Option func(options *Options)
+
+func WithCacheDir(dir string) Option {
+	return func(options *Options) {
+		options.CacheDir = dir
+	}
+}
+
+func New(setup Setup, opts ...Option) (*App, error) {
+	var options Options
+
+	for _, o := range opts {
+		o(&options)
+	}
+
+	instance, err := setup(&options)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +195,7 @@ func New(setup Setup) (*App, error) {
 	}
 
 	return newApp(app, cc, NewImportFunc(instance.Dir, func(path string) (*App, error) {
-		return New(FromDir(path))
+		return New(FromDir(path), opts...)
 	}))
 }
 
@@ -188,7 +215,7 @@ func NewImportFunc(importBaseDir string, f func(string) (*App, error)) func(stri
 	}
 }
 
-func findVariantFiles(dirPathOrURL string) ([]string, error) {
+func findVariantFiles(fs *fs2.FileSystem, cacheDir string, dirPathOrURL string) ([]string, error) {
 	var dir string
 
 	s := strings.Split(dirPathOrURL, "::")
@@ -201,9 +228,22 @@ func findVariantFiles(dirPathOrURL string) ([]string, error) {
 			return nil, err
 		}
 
-		remote, err := depresolver.New(depresolver.Home(".variant2/cache"))
+		if cacheDir == "" {
+			cacheDir = DefaultCacheDir
+		}
+
+		remote, err := depresolver.New(depresolver.Home(cacheDir))
 		if err != nil {
 			return nil, err
+		}
+
+		remote.DirExists = func(path string) bool {
+			info, _ := fs.Stat(path)
+			if info != nil && info.IsDir() {
+				return true
+			}
+
+			return false
 		}
 
 		us := forcePrefix + "::" + u.String()
@@ -230,7 +270,7 @@ func findVariantFiles(dirPathOrURL string) ([]string, error) {
 		dir = dirPathOrURL
 	}
 
-	files, err := conf.FindVariantFiles(dir)
+	files, err := conf.FindVariantFiles(fs, dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get %s files: %v", conf.VariantFileExt, err)
 	}
