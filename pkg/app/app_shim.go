@@ -55,7 +55,11 @@ func (app *App) ExportGo(srcDir, dstDir string) error {
 		return err
 	}
 
-	a, err := New(FromDir(srcDir))
+	dstVendorDir := filepath.Join(dstDir, fs.VendorPrefix)
+
+	cacheDir := filepath.Join(dstVendorDir, DefaultCacheDir)
+
+	a, err := New(FromDir(srcDir), WithCacheDir(cacheDir))
 	if err != nil {
 		return err
 	}
@@ -125,26 +129,8 @@ func main() {
 		return err
 	}
 
-	walkErr := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return fmt.Errorf("walking into %s: %w", path, err)
-		}
-
-		rel, err := filepath.Rel(srcDir, path)
-		if err != nil {
-			return fmt.Errorf("computing path of %s relative to %s: %w", path, srcDir, err)
-		}
-
-		abs := filepath.Join(dstDir, fs.VendorPrefix, rel)
-
-		if info.IsDir() {
-			return os.MkdirAll(abs, 0755)
-		}
-
-		return copyFile(path, abs)
-	})
-	if walkErr != nil {
-		return fmt.Errorf("copying files from %s: %w", srcDir, walkErr)
+	if err := copyFiles(srcDir, dstVendorDir); err != nil {
+		return fmt.Errorf("copy files: %w", err)
 	}
 
 	_, err = app.execCmd(
@@ -187,6 +173,37 @@ func main() {
 		if err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func copyFiles(srcDir string, dstDir string) error {
+	walkErr := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return fmt.Errorf("walking into %s: %w", path, err)
+		}
+
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return fmt.Errorf("computing path of %s relative to %s: %w", path, srcDir, err)
+		}
+
+		abs := filepath.Join(dstDir, rel)
+
+		if strings.Contains(rel, DefaultCacheDir) {
+			fmt.Fprintf(os.Stderr, "Skipping %s\n", rel)
+			return nil
+		}
+
+		if info.IsDir() {
+			return os.MkdirAll(abs, 0755)
+		}
+
+		return copyFile(path, abs)
+	})
+	if walkErr != nil {
+		return fmt.Errorf("copying files from %s: %w", srcDir, walkErr)
 	}
 
 	return nil

@@ -47,3 +47,10 @@ smoke: build
 	VARIANT_BUILD_VER=v0.0.0 VARIANT_BUILD_REPLACE=$(shell pwd) PATH=${PATH}:$(GOBIN) ./variant export binary examples/advanced/import-multi build/import-multi
 	build/import-multi foo baz HELLO > build/import-multi.log
 	bash -c 'diff <(echo HELLO) <(cat build/import-multi.log)'
+
+	rm build/import-multi.log
+	cd build && \
+	  ./import-multi foo baz HELLO > import-multi.log && \
+	  bash -c 'diff <(echo HELLO) <(cat import-multi.log)'
+	# Remote imports are cached and embedded into the binary so it shouldn't be fetched/persisted at run time
+	[ ! -e build/.variant2/cache ] || bash -c 'echo build/.variant2/cache check failed; exit 1'
