@@ -6,8 +6,8 @@ test "app deploy" {
     exitstatus = 0
     err = ""
     out = <<EOS
-{"app":"app1","bar":"OPT1","env":"prod","getfoo":"app_override,prod,PARAM1","v":"app1prod"}
-{"app":"app1","bar":"OPT1","env":"prod","getfoo":"app_override,prod,PARAM1","v":"app1prod"}
+{"app":"app1","bar":"OPT1","env":"prod","getfoo":"app_override,prod,PARAM1","region":"us-east-2","v":"app1prod"}
+{"app":"app1","bar":"OPT1","env":"prod","getfoo":"app_override,prod,PARAM1","region":"us-east-2","v":"app1prod"}
 EOS
   }
 
@@ -17,8 +17,19 @@ EOS
     exitstatus = 0
     err = ""
     out = <<EOS
-{"app":"app2","bar":"OPT1","env":"prod","getfoo":"app_override,prod,PARAM1","v":"app2"}
-{"app":"app2","bar":"OPT1","env":"prod","getfoo":"app_override,prod,PARAM1","v":"app2"}
+{"app":"app2","bar":"OPT1","env":"prod","getfoo":"app_override,prod,PARAM1","region":"us-east-2","v":"app2"}
+{"app":"app2","bar":"OPT1","env":"prod","getfoo":"app_override,prod,PARAM1","region":"us-east-2","v":"app2"}
+EOS
+  }
+
+  case "app1dev" {
+    app = "app1"
+    env = "dev"
+    exitstatus = 0
+    err = ""
+    out = <<EOS
+{"app":"app1","bar":"OPT1","env":"dev","getfoo":"app_override,dev,PARAM1","region":null,"v":"app1"}
+{"app":"app1","bar":"OPT1","env":"dev","getfoo":"app_override,dev,PARAM1","region":null,"v":"app1"}
 EOS
   }
 
