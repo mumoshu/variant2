@@ -1475,7 +1475,7 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 				return cty.NilVal, fmt.Errorf("format %q is not implemented yet. It must be \"yaml\" or omitted", format)
 			}
 
-			if err := mergo.Merge(&merged, m, mergo.WithOverride); err != nil {
+			if err := mergo.Merge(&merged, m, mergo.WithOverride, mergo.WithOverwriteWithEmptyValue); err != nil {
 				return cty.NilVal, err
 			}
 		}
