@@ -38,23 +38,18 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/zclconf/go-cty v1.2.1
 	github.com/zclconf/go-cty-yaml v1.0.1
-	golang.org/x/crypto v0.0.0-20200214034016-1d94cc7ab1c6 // indirect
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
 	golang.org/x/tools v0.0.0-20200331025713-a30bf2db82d4 // indirect
 	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
-	k8s.io/api v0.0.0-20190918155943-95b840bb6a1f // indirect
-	k8s.io/apiextensions-apiserver v0.0.0-20190918161926-8f644eb6e783 // indirect
-	k8s.io/apimachinery v0.0.0-20190913080033-27d36303b655
-	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
+	k8s.io/api v0.18.9 // indirect
+	k8s.io/apiextensions-apiserver v0.18.9 // indirect
+	k8s.io/apimachinery v0.18.9
+	k8s.io/cli-runtime v0.18.9 // indirect
+	k8s.io/client-go v0.18.9
 	k8s.io/klog v1.0.0 // indirect
-	sigs.k8s.io/controller-runtime v0.4.0
+	sigs.k8s.io/controller-runtime v0.6.3
 )
 
-replace (
-	k8s.io/api v0.0.0-20190918155943-95b840bb6a1f => k8s.io/api v0.0.0-20190918155943-95b840bb6a1f
-	k8s.io/apiextensions-apiserver v0.0.0-20190918161926-8f644eb6e783 => k8s.io/apiextensions-apiserver v0.0.0-20190918161926-8f644eb6e783
-	k8s.io/apimachinery v0.0.0-20190913080033-27d36303b655 => k8s.io/apimachinery v0.0.0-20190913080033-27d36303b655
-	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible => k8s.io/client-go v0.0.0-20190918160344-1fbdaa4c8d90
-)
+replace github.com/summerwind/whitebox-controller v0.7.1 => github.com/mumoshu/whitebox-controller v0.5.1-0.20201028130131-ac7a0743254b
