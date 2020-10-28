@@ -1,0 +1,7 @@
+apiVersion: core.variant.run/v1beta1
+kind: Resource
+metadata:
+  name: myresource
+spec:
+  env: preview
+  ref: abc2345
