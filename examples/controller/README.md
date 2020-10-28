@@ -190,3 +190,24 @@ The list of tools may include:
 - Helm
 - Helmfile
 - Waypoint
+
+## Advanced configuration
+
+- Using non-default CRD
+
+### Using non-default CRD
+
+You can use different apiVersion than the default `core.variant.run/v1beta1` by setting `<PREFIX>_FOR_API_VERSION`,
+and different kind than the default `Resource` by setting `<PREFIX>_FOR_KIND`.
+
+For example, to let the controller watch and reconcile `whatever.example.com/v1alpha1` `MyCustomStack` objects, run `variant`
+like:
+
+```console
+$ VARIANT_CONTROLLER_JOB_ON_APPLY=apply \
+    VARIANT_CONTROLLER_JOB_ON_DESTROY=destroy \
+    VARIANT_CONTROLLER_NAME=my-custom-stack \
+    VARIANT_CONTROLLER_FOR_API_VERSION=whatever.example.com/v1alpha1 \
+    VARIANT_CONTROLLER_FOR_KIND=MyCustomStack \
+      variant
+```
