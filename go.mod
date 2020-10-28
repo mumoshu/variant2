@@ -1,6 +1,6 @@
 module github.com/mumoshu/variant2
 
-go 1.13
+go 1.15
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.0.5
