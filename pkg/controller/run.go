@@ -4,19 +4,24 @@ import (
 	"os"
 	"strings"
 
+	"github.com/summerwind/whitebox-controller/config"
+	"github.com/summerwind/whitebox-controller/manager"
 	"github.com/summerwind/whitebox-controller/reconciler/state"
 	"golang.org/x/xerrors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	kconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 
+	// We import these here rather than in main to automate setting up cloud-provider-specific authentication strategies.
 	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 
-	"github.com/summerwind/whitebox-controller/config"
-	"github.com/summerwind/whitebox-controller/manager"
+	// We import these here rather than in main to automate setting up cloud-provider-specific authentication strategies.
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+
+	// We import these here rather than in main to automate setting up cloud-provider-specific authentication strategies.
+	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
+	kconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 )
 
 const (
@@ -34,7 +39,7 @@ func RunRequested() bool {
 }
 
 func Run(run func([]string) (string, error)) (finalErr error) {
-	logf.SetLogger(logf.ZapLogger(false))
+	logf.SetLogger(zap.New())
 
 	defer func() {
 		if finalErr != nil {
@@ -112,5 +117,5 @@ func Run(run func([]string) (string, error)) (finalErr error) {
 		return xerrors.Errorf("starting controller-manager: %w", err)
 	}
 
-	return err
+	return nil
 }

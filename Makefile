@@ -24,7 +24,8 @@ lint: bin/golangci-lint
 	  --enable-all \
 	  --disable gochecknoglobals \
 	  --disable gochecknoinits \
-	  --disable gomnd,funlen,prealloc,gocritic,lll,gocognit
+	  --disable gomnd,funlen,prealloc,gocritic,lll,gocognit \
+	  --disable testpackage,goerr113,exhaustivestruct,wrapcheck
 
 .PHONY: smoke
 smoke: export GOBIN=$(shell pwd)/tools

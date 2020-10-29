@@ -2,10 +2,11 @@ package controller
 
 import (
 	"bytes"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/xerrors"
 	"io"
 	"os"
+
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/xerrors"
 )
 
 func CaptureOutput(f func(io.Writer, io.Writer) error) (string, error) {

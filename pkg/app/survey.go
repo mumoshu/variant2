@@ -2,12 +2,11 @@ package app
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/zclconf/go-cty/cty"
-
-	"strconv"
-	"strings"
 )
 
 type PendingInput struct {
@@ -54,6 +53,7 @@ func MakeQuestions(pendingOptions []PendingInput) ([]*survey.Question, map[strin
 
 			transform = func(ans interface{}) (newAns interface{}) {
 				i, _ := strconv.Atoi(ans.(string))
+
 				return i
 			}
 
@@ -61,7 +61,7 @@ func MakeQuestions(pendingOptions []PendingInput) ([]*survey.Question, map[strin
 				switch v := ans.(type) {
 				case string:
 					if _, err := strconv.Atoi(v); err != nil {
-						return fmt.Errorf("option %q: %v", name, err)
+						return fmt.Errorf("option %q: %w", name, err)
 					}
 				default:
 					return fmt.Errorf("option %q: number: unexpected type of input %T", name, v)
@@ -83,6 +83,7 @@ func MakeQuestions(pendingOptions []PendingInput) ([]*survey.Question, map[strin
 
 			transform = func(ans interface{}) (newAns interface{}) {
 				lines := strings.Split(ans.(string), "\n")
+
 				return lines
 			}
 

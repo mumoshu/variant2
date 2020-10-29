@@ -2,8 +2,9 @@ package variant
 
 import (
 	"fmt"
-	"github.com/mumoshu/variant2/pkg/controller"
 	"io"
+
+	"github.com/mumoshu/variant2/pkg/controller"
 )
 
 func RunMain(env Env, opts ...Option) error {
@@ -30,6 +31,7 @@ func RunMain(env Env, opts ...Option) error {
 				})
 			})
 
+			//nolint:wrapcheck
 			return out, err
 		})
 	}

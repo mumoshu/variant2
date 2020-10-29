@@ -1,17 +1,18 @@
 package conf
 
 import (
+	"github.com/hashicorp/hcl/v2/ext/tryfunc"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/hashicorp/terraform/lang/funcs"
 	ctyyaml "github.com/zclconf/go-cty-yaml"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/function"
 	"github.com/zclconf/go-cty/cty/function/stdlib"
-
-	"github.com/hashicorp/hcl/v2/ext/tryfunc"
 )
 
-// Functions is
+// Functions is a set of functions that are available in .variant files.
+// This set should cover all the functions available in moderately up-to-date version of Terraform,
+// so that the experience of using functions should be easier for users who are used with Terraform.
 func Functions(baseDir string) map[string]function.Function {
 	return map[string]function.Function{
 		"abs":              stdlib.AbsoluteFunc,

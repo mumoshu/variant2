@@ -9,11 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mumoshu/variant2/pkg/fs"
-
 	"github.com/hashicorp/hcl/v2"
-
 	"github.com/mumoshu/variant2/pkg/conf"
+	"github.com/mumoshu/variant2/pkg/fs"
 )
 
 func (app *App) ExportBinary(srcDir, dstFile string) error {
@@ -28,12 +26,11 @@ func (app *App) ExportBinary(srcDir, dstFile string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(dstFile), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dstFile), 0o755); err != nil {
 		return err
 	}
 
 	absDstFile, err := filepath.Abs(dstFile)
-
 	if err != nil {
 		return err
 	}
@@ -51,7 +48,7 @@ func (app *App) ExportBinary(srcDir, dstFile string) error {
 }
 
 func (app *App) ExportGo(srcDir, dstDir string) error {
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
 		return err
 	}
 
@@ -119,13 +116,14 @@ func main() {
 	replaced := strings.ReplaceAll(string(code), "${MODULE_NAME}", moduleName)
 	code = []byte(replaced)
 
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
 		return err
 	}
 
 	exportDir := filepath.Join(dstDir, "main.go")
 
-	if err := ioutil.WriteFile(exportDir, code, 0644); err != nil {
+	//nolint:gosec
+	if err := ioutil.WriteFile(exportDir, code, 0o644); err != nil {
 		return err
 	}
 
@@ -208,11 +206,12 @@ func copyFiles(srcDir string, dstDir string) error {
 
 		if strings.Contains(rel, DefaultCacheDir) {
 			fmt.Fprintf(os.Stderr, "Skipping %s\n", rel)
+
 			return nil
 		}
 
 		if info.IsDir() {
-			return os.MkdirAll(abs, 0755)
+			return os.MkdirAll(abs, 0o755)
 		}
 
 		return copyFile(path, abs)
@@ -254,7 +253,7 @@ func copyFile(src, dst string) (err error) {
 }
 
 func (app *App) ExportShim(srcDir, dstDir string) error {
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
 		return err
 	}
 
@@ -300,7 +299,8 @@ func exportWithShim(variantBin string, files map[string]*hcl.File, dstDir string
 		return err
 	}
 
-	if err := ioutil.WriteFile(cfgPath, bs, 0644); err != nil {
+	//nolint:gosec
+	if err := ioutil.WriteFile(cfgPath, bs, 0o644); err != nil {
 		return err
 	}
 
@@ -328,5 +328,6 @@ func generateShim(variantBin string, path string) error {
 import = "."
 `, variantBin))
 
-	return ioutil.WriteFile(path, shimData, 0755)
+	//nolint:gosec
+	return ioutil.WriteFile(path, shimData, 0o755)
 }

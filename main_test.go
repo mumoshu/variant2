@@ -10,9 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/google/go-cmp/cmp"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestExamples(t *testing.T) {
@@ -264,6 +263,7 @@ func TestExamples(t *testing.T) {
 					if tc.wd != "" {
 						return tc.wd, nil
 					}
+
 					return "", fmt.Errorf("Unexpected call to getw")
 				},
 			}
@@ -368,6 +368,7 @@ func TestExport(t *testing.T) {
 					if tc.srcDir != "" {
 						return tc.srcDir, nil
 					}
+
 					return "", fmt.Errorf("Unexpected call to getw")
 				},
 			}

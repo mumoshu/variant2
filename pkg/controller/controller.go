@@ -3,12 +3,13 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/go-logr/logr"
 	"golang.org/x/xerrors"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
 )
 
 type controller struct {
@@ -20,7 +21,7 @@ type controller struct {
 	// reconciliation.
 	podName string
 
-	// Kubernetes client to be used for querying target objects and managing Reconcilation objects
+	// Kubernetes client to be used for querying target objects and managing Reconciliation objects
 	runtimeClient client.Client
 
 	// Runs `variant run <args>` and returns combined output and/or error
@@ -97,7 +98,7 @@ func (c *controller) logReconciliation(orig *unstructured.Unstructured, job, com
 	}
 
 	// Use of GenerateName results in 404
-	//obj.SetGenerateName(name + "-")
+	// obj.SetGenerateName(name + "-")
 	obj.SetName(reconName)
 	// Missing Namespace results in 404
 	obj.SetNamespace(namespace)
@@ -106,6 +107,7 @@ func (c *controller) logReconciliation(orig *unstructured.Unstructured, job, com
 		"core.variant.run/controller": c.controllerName,
 		"core.variant.run/pod":        c.podName,
 	})
+
 	spec, ok, err := unstructured.NestedMap(st.Object, "spec")
 	if !ok {
 		return fmt.Errorf("missing Resource.Spec: %w", err)

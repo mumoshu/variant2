@@ -13,6 +13,7 @@ import (
 	variantslack "github.com/mumoshu/variant2/pkg/slack"
 	"github.com/nlopes/slack"
 	"github.com/zclconf/go-cty/cty"
+	"golang.org/x/xerrors"
 )
 
 func (r *Runner) StartSlackbot(name string) error {
@@ -46,7 +47,7 @@ func (r *Runner) StartSlackbot(name string) error {
 							Placeholder: desc,
 							Type:        slack.InputTypeText,
 							Name:        k,
-							//Optional: true,
+							// Optional: true,
 						}
 					default:
 						elem = slack.DialogInput{
@@ -54,7 +55,7 @@ func (r *Runner) StartSlackbot(name string) error {
 							Placeholder: desc,
 							Type:        slack.InputTypeTextArea,
 							Name:        k,
-							//Optional: true,
+							// Optional: true,
 						}
 					}
 
@@ -85,7 +86,7 @@ func (r *Runner) StartSlackbot(name string) error {
 
 					_, transformers, err := app.MakeQuestions(pendingOptions)
 					if err != nil {
-						return nil, err
+						return nil, xerrors.Errorf("making questions: %w", err)
 					}
 
 					vals := make(map[string]interface{})
@@ -98,6 +99,7 @@ func (r *Runner) StartSlackbot(name string) error {
 
 						if v == "" {
 							errs[k] = fmt.Errorf("%s is required", k)
+
 							continue
 						}
 
@@ -105,6 +107,7 @@ func (r *Runner) StartSlackbot(name string) error {
 							b, err := strconv.ParseBool(v)
 							if err != nil {
 								errs[k] = err
+
 								continue
 							}
 
@@ -138,7 +141,7 @@ func (r *Runner) StartSlackbot(name string) error {
 					}
 
 					if err := app.SetOptsFromMap(transformers, opts, vals); err != nil {
-						return nil, err
+						return nil, xerrors.Errorf("setting options: %w", err)
 					}
 
 					done <- nil
@@ -148,6 +151,7 @@ func (r *Runner) StartSlackbot(name string) error {
 
 				if err := bot.Client.OpenDialogContext(context.TODO(), message.TriggerID, dialog); err != nil {
 					log.Print("open dialog failed: ", err)
+
 					return nil
 				}
 

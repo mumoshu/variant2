@@ -20,6 +20,8 @@ $ build/simple app deploy -n default
 			if err != nil {
 				c.SilenceUsage = true
 			}
+
+			//nolint:wrapcheck
 			return err
 		},
 	}

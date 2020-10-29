@@ -16,14 +16,15 @@ func Pipe() (func() (*bytes.Buffer, error), io.WriteCloser) {
 
 	go func() {
 		bs, err := ioutil.ReadAll(r)
-
 		if err != nil {
 			outDone <- err
+
 			return
 		}
 
 		if _, err := out.Write(bs); err != nil {
 			outDone <- err
+
 			return
 		}
 

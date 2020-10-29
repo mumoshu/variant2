@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/zclconf/go-cty/cty"
+	"golang.org/x/xerrors"
 )
 
 type Event struct {
@@ -136,7 +137,7 @@ func (l *EventLogger) append(evt Event) error {
 		// Non-nil line means that any collect block's condition matched the logged event
 		if line != nil && l.Stream == "stderr" {
 			if _, err := l.Stderr.Write([]byte(*line + "\n")); err != nil {
-				return err
+				return xerrors.Errorf("wrirting stderr: %w", err)
 			}
 		}
 	}
@@ -168,8 +169,9 @@ func (l *EventLogger) Register(logCollector LogCollector) func() error {
 			file = logCollector.FilePath
 		}
 
-		if err := ioutil.WriteFile(file, []byte(strings.Join(logCollector.lines, "\n")), 0644); err != nil {
-			return err
+		//nolint:gosec
+		if err := ioutil.WriteFile(file, []byte(strings.Join(logCollector.lines, "\n")), 0o644); err != nil {
+			return xerrors.Errorf("writing %s: %w", file, err)
 		}
 
 		log := Log{

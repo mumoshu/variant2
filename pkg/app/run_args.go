@@ -4,7 +4,6 @@ import "github.com/hashicorp/hcl/v2"
 
 func buildArgsFromExpr(jobCtx *JobContext, expr hcl.Expression) (map[string]interface{}, error) {
 	localArgs, err := exprToGoMap(jobCtx.evalContext, expr)
-
 	if err != nil {
 		return nil, err
 	}

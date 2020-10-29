@@ -10,13 +10,11 @@ const (
 	coreVersion = "v1beta1"
 )
 
-var (
-	reconciliationGroupVersionKind = schema.GroupVersionKind{
-		Group:   coreGroup,
-		Version: coreVersion,
-		Kind:    "Reconciliation",
-	}
-)
+var reconciliationGroupVersionKind = schema.GroupVersionKind{
+	Group:   coreGroup,
+	Version: coreVersion,
+	Kind:    "Reconciliation",
+}
 
 func newReconciliation() *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{}

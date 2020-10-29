@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/rakyll/statik/fs"
+	"golang.org/x/xerrors"
 )
 
 const (
@@ -35,7 +37,7 @@ func (s *FileSystem) ReadFile(path string) ([]byte, error) {
 	}
 
 	f, err := fs.Open(s.vendored(path))
-	if err == os.ErrNotExist {
+	if errors.Is(err, os.ErrNotExist) {
 		return ioutil.ReadFile(path)
 	}
 	defer f.Close()
@@ -55,7 +57,7 @@ func (s *FileSystem) Stat(path string) (os.FileInfo, error) {
 	}
 
 	f, err := fs.Open(s.vendored(path))
-	if err == os.ErrNotExist {
+	if errors.Is(err, os.ErrNotExist) {
 		return os.Stat(path)
 	}
 	defer f.Close()
@@ -153,7 +155,7 @@ func glob(fs http.FileSystem, dir, pattern string) ([]string, error) {
 	for _, n := range names {
 		matched, err := filepath.Match(pattern, n)
 		if err != nil {
-			return m, err
+			return m, xerrors.Errorf("matching pattern %s against %s: %w", pattern, n, err)
 		}
 
 		if matched {
