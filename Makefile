@@ -20,7 +20,7 @@ bin/golangci-lint:
 
 .PHONY: lint
 lint: bin/golangci-lint
-	bin/golangci-lint run --tests \
+	bin/golangci-lint run --tests ./... \
 	  --enable-all \
 	  --disable gochecknoglobals \
 	  --disable gochecknoinits \
