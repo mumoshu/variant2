@@ -1,5 +1,5 @@
 apiVersion: core.variant.run/v1beta1
-kind: Reconcilation
+kind: Reconciliation
 metadata:
   name: myresource-abc
 spec:

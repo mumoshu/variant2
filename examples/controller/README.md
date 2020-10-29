@@ -67,18 +67,18 @@ EOS
 Within a few seconds, the controller will reconcile your `Resource` by running `variant run apply --env preview --ref abc1234`.
 
 You can verify that by tailing controller logs by `kubectl logs`, or browsing the `Reconcilation` object that is created by
-the controller to record the reconcilation details:
+the controller to record the reconciliation details:
 
 ```console
-$ kubectl get reconcilation
+$ kubectl get reconciliation
 NAME           AGE
 myresource-2   12m
 ```
 
 ```console
-$ kubectl get -o yaml reconcilation myresource-2
+$ kubectl get -o yaml reconciliation myresource-2
 apiVersion: core.variant.run/v1beta1
-kind: Reconcilation
+kind: Reconciliation
 metadata:
   creationTimestamp: "2020-10-28T12:05:55Z"
   generation: 1
@@ -114,7 +114,7 @@ EOS
 ```
 
 ```console
-$ kubectl get reconcilation
+$ kubectl get reconciliation
 NAME           AGE
 myresource-2   12m
 myresource-3   12m
@@ -122,7 +122,7 @@ myresource-3   12m
 
 ```cnosole
 apiVersion: core.variant.run/v1beta1urce-3
-kind: Reconcilation
+kind: Reconciliation
 metadata:
   creationTimestamp: "2020-10-28T12:06:10Z"
   generation: 1
@@ -146,7 +146,7 @@ Finally, deleting the `Resource` will let `variant` destroy the underlying resou
 as you've configured:
 
 ```console
-$ kubectl get reconcilation
+$ kubectl get reconciliation
 NAME           AGE
 myresource-2   19m
 myresource-3   19m
@@ -154,9 +154,9 @@ myresource-4   9s
 ```
 
 ```console
-$ kubectl get reconcilation -o yaml myresource-4
+$ kubectl get reconciliation -o yaml myresource-4
 apiVersion: core.variant.run/v1beta1
-kind: Reconcilation
+kind: Reconciliation
 metadata:
   creationTimestamp: "2020-10-28T12:25:32Z"
   generation: 1

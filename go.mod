@@ -6,6 +6,7 @@ require (
 	github.com/AlecAivazis/survey/v2 v2.0.5
 	github.com/PaesslerAG/jsonpath v0.1.1 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
+	github.com/go-logr/logr v0.1.0
 	github.com/go-playground/universal-translator v0.17.0 // indirect
 	github.com/google/go-cmp v0.4.0
 	github.com/google/go-github/v27 v27.0.6 // indirect
