@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 
 	"github.com/mumoshu/variant2/pkg/fs"
+	"golang.org/x/xerrors"
 )
 
 const (
@@ -11,7 +12,7 @@ const (
 )
 
 // FindVariantFiles walks the given path and returns the files ending whose ext is .variant
-// Also, it returns the path if the path is just a file and a HCL file
+// Also, it returns the path if the path is just a file and a HCL file.
 func FindVariantFiles(fs *fs.FileSystem, path string) ([]string, error) {
 	var (
 		files []string
@@ -20,13 +21,15 @@ func FindVariantFiles(fs *fs.FileSystem, path string) ([]string, error) {
 
 	fi, err := fs.Stat(path)
 	if err != nil {
-		return files, err
+		return files, xerrors.Errorf("stat: %w", err)
 	}
 
 	if fi.IsDir() {
-		found, err := fs.Glob(filepath.Join(path, "*"+VariantFileExt+"*"))
+		variantFilesPattern := filepath.Join(path, "*"+VariantFileExt+"*")
+
+		found, err := fs.Glob(variantFilesPattern)
 		if err != nil {
-			return nil, err
+			return nil, xerrors.Errorf("glob %q: %w", variantFilesPattern, err)
 		}
 
 		for _, f := range found {
@@ -37,9 +40,8 @@ func FindVariantFiles(fs *fs.FileSystem, path string) ([]string, error) {
 			}
 
 			info, err := fs.Stat(f)
-
 			if err != nil {
-				return nil, err
+				return nil, xerrors.Errorf("stat %s: %w", f, err)
 			}
 
 			if info.IsDir() {
@@ -57,5 +59,5 @@ func FindVariantFiles(fs *fs.FileSystem, path string) ([]string, error) {
 		files = append(files, path)
 	}
 
-	return files, err
+	return files, xerrors.Errorf("stat %s: %w", path, err)
 }

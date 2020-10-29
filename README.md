@@ -17,6 +17,7 @@
 - **Embeddable**: Easy embedding in any Golang application
 - **Easy distribution**: Build a single-executable of your command with Golang
 - **Dependency Management**: Dependent files, executable binaries and docker-run shims can be automatically installed and updated with the [variantdev/mod](https://github.com/variantdev/mod) integration. Example: [module](https://github.com/mumoshu/variant2/tree/master/examples/module)
+- **Run as a Kubernetes controller**: You can easily turn your Variant command into a Kubernetes controller. See [examples/controller](examples/controller)
 - **Integrations**: Integrates nicely with Slack, GitHub. You can run Variant command in response to Slack message, GitHub issue comment, commit push, etc.
 
 # Getting Started

@@ -15,27 +15,24 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/variantdev/vals"
-
-	"github.com/kr/text"
-
-	"github.com/zclconf/go-cty/cty/function"
-
-	"github.com/imdario/mergo"
-	"github.com/variantdev/mod/pkg/variantmod"
-	ctyyaml "github.com/zclconf/go-cty-yaml"
-	"gopkg.in/yaml.v3"
-
 	multierror "github.com/hashicorp/go-multierror"
 	hcl2 "github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	gohcl2 "github.com/hashicorp/hcl/v2/gohcl"
+	"github.com/imdario/mergo"
+	"github.com/kr/text"
 	"github.com/mumoshu/variant2/pkg/conf"
 	"github.com/pkg/errors"
 	"github.com/variantdev/dag/pkg/dag"
 	"github.com/variantdev/mod/pkg/shell"
+	"github.com/variantdev/mod/pkg/variantmod"
+	"github.com/variantdev/vals"
+	ctyyaml "github.com/zclconf/go-cty-yaml"
 	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/function"
 	"github.com/zclconf/go-cty/cty/gocty"
+	"golang.org/x/xerrors"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -90,9 +87,9 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 		cc := app.Config
 
 		jobCtx, err := app.createJobContext(cc, j, args, opts, f)
-
 		if err != nil {
 			app.PrintError(err)
+
 			return nil, err
 		}
 
@@ -107,6 +104,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			}
 		}
 
+		//nolint:nestif
 		if j.Log != nil {
 			if len(j.Log.Collects) == 0 {
 				return nil, fmt.Errorf("log config for job %q is invalid: at least one collect block is required", j.Name)
@@ -117,6 +115,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			if nonEmptyExpression(j.Log.File) {
 				if diags := gohcl2.DecodeExpression(j.Log.File, jobEvalCtx, &file); diags.HasErrors() {
 					app.PrintDiags(diags)
+
 					return nil, diags
 				}
 			}
@@ -136,6 +135,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 				if nonEmptyExpression(j.Log.Stream) {
 					if diags := gohcl2.DecodeExpression(j.Log.Stream, jobEvalCtx, &stream); diags.HasErrors() {
 						app.PrintDiags(diags)
+
 						return nil, diags
 					}
 				}
@@ -153,6 +153,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 		if !IsExpressionEmpty(j.Concurrency) {
 			if err := gohcl2.DecodeExpression(j.Concurrency, jobEvalCtx, &concurrency); err != nil {
 				app.PrintDiags(err)
+
 				return nil, err
 			}
 
@@ -187,6 +188,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 		r, err := app.execJobSteps(l, jobCtx, needs, j.Steps, concurrency, streamOutput)
 		if err != nil {
 			app.PrintDiags(err)
+
 			return r, err
 		}
 
@@ -194,6 +196,7 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			jobRes, err := app.execJob(l, j, jobCtx, streamOutput)
 			if err != nil {
 				app.PrintDiags(err)
+
 				return jobRes, err
 			}
 
@@ -242,17 +245,17 @@ func (app *App) ExitWithError(err error) {
 }
 
 func (app *App) PrintError(err error) {
-	switch diags := err.(type) {
-	case hcl2.Diagnostics:
+	diags := hcl2.Diagnostics{}
+	if errors.As(err, &diags) {
 		app.WriteDiags(diags)
-	default:
+	} else {
 		fmt.Fprintf(os.Stderr, "%v", err)
 	}
 }
 
 func (app *App) PrintDiags(err error) {
-	switch diags := err.(type) {
-	case hcl2.Diagnostics:
+	diags := hcl2.Diagnostics{}
+	if errors.As(err, &diags) {
 		app.WriteDiags(diags)
 	}
 }
@@ -404,6 +407,7 @@ func (app *App) execJob(l *EventLogger, j JobSpec, jobCtx *JobContext, streamOut
 
 	evalCtx := jobCtx.evalContext
 
+	//nolint:nestif
 	if j.Exec != nil {
 		if diags := gohcl2.DecodeExpression(j.Exec.Command, evalCtx, &cmd); diags.HasErrors() {
 			return nil, diags
@@ -453,6 +457,7 @@ func (app *App) execJob(l *EventLogger, j JobSpec, jobCtx *JobContext, streamOut
 					return nil, err2
 				}
 			}
+
 			return &Result{}, nil
 		}
 	}
@@ -478,6 +483,7 @@ func (app *App) execAssert(ctx *hcl2.EvalContext, a Assert) error {
 		return diags
 	}
 
+	//nolint:nestif
 	if !assert {
 		fp, err := os.Open(cond.Range().Filename)
 		if err != nil {
@@ -486,8 +492,8 @@ func (app *App) execAssert(ctx *hcl2.EvalContext, a Assert) error {
 		defer fp.Close()
 
 		start := cond.Range().Start.Byte
-		b, err := ioutil.ReadAll(fp)
 
+		b, err := ioutil.ReadAll(fp)
 		if err != nil {
 			panic(err)
 		}
@@ -538,6 +544,7 @@ func failOnPanic(t *testing.T) {
 		t.FailNow()
 	}
 }
+
 func (app *App) RunTests(pat string) (*Result, error) {
 	var res *Result
 
@@ -654,7 +661,7 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 
 	caseFieldsTopology, err := caseFieldsDAG.Sort()
 	if err != nil {
-		return nil, err
+		return nil, xerrors.Errorf("sorting DAG of dependencies: %w", err)
 	}
 
 	var sortedCaseFieldNames []string
@@ -730,7 +737,7 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 		for _, a := range t.Assert {
 			if err := app.execAssert(jobCtx.evalContext, a); err != nil {
 				if strings.HasPrefix(err.Error(), "assertion \"") {
-					return nil, fmt.Errorf("case %q: %v", c.Name, err)
+					return nil, fmt.Errorf("case %q: %w", c.Name, err)
 				}
 
 				return nil, err
@@ -785,6 +792,7 @@ func (app *App) dispatchRunJob(l *EventLogger, jobCtx *JobContext, run eitherJob
 
 	var err error
 
+	//nolint:nestif
 	if run.static != nil {
 		jobRun, err = staticRunToJob(jobCtx, run.static)
 
@@ -849,7 +857,6 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn, s
 
 		for _, item := range ctyItems {
 			v, err := ctyToGo(item)
-
 			if err != nil {
 				return nil, err
 			}
@@ -873,7 +880,6 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn, s
 			}
 
 			res, err := app.run(l, r.Name, args, streamOutput)
-
 			if err != nil {
 				return res, err
 			}
@@ -996,7 +1002,7 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *JobContext, results map[str
 
 	plan, err := g.Plan()
 	if err != nil {
-		return nil, err
+		return nil, xerrors.Errorf("calculating DAG of dependencies: %w", err)
 	}
 
 	type result struct {
@@ -1049,6 +1055,7 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *JobContext, results map[str
 				if cancelled {
 					rs[ii] = result{r: &Result{Cancelled: true}}
 					rsm.Unlock()
+
 					return
 				}
 				rsm.Unlock()
@@ -1117,6 +1124,7 @@ func getContext(sourceLocator hcl2.Expression) cty.Value {
 func getDefault(ctx cty.Value, def hcl2.Expression, tpe cty.Type) (*cty.Value, error) {
 	r := def.Range()
 
+	//nolint:nestif
 	if r.Start != r.End {
 		var vv cty.Value
 
@@ -1203,6 +1211,7 @@ func getValueFor(ctx cty.Value, name string, typeExpr hcl2.Expression, defaultEx
 
 	val, err := gocty.ToCtyValue(v, tpe)
 	if err != nil {
+		//nolint:wrapcheck
 		return nil, nil, err
 	}
 
@@ -1347,13 +1356,12 @@ func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[stri
 
 	secretRefsEvaluator, err := vals.New(vals.Options{CacheSize: 100})
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize vals: %v", err)
+		return nil, fmt.Errorf("failed to initialize vals: %w", err)
 	}
 
 	sec, err := app.getConfigs(secJobCtx, cc, j, "secret", func(j JobSpec) []Config { return j.Secrets }, func(m map[string]interface{}) (map[string]interface{}, error) {
 		return secretRefsEvaluator.Eval(m)
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1402,7 +1410,7 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 				yamlData, err = ioutil.ReadFile(source.Path)
 				if err != nil {
 					if source.Default == nil {
-						return cty.NilVal, fmt.Errorf("job %q: %s %q: source %d: %v", j.Name, confType, confSpec.Name, sourceIdx, err)
+						return cty.NilVal, fmt.Errorf("job %q: %s %q: source %d: %w", j.Name, confType, confSpec.Name, sourceIdx, err)
 					}
 
 					yamlData = []byte(*source.Default)
@@ -1420,7 +1428,6 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 				}
 
 				args, err := buildArgsFromExpr(jobCtx.WithEvalContext(confCtx).Ptr(), source.Args)
-
 				if err != nil {
 					return cty.NilVal, err
 				}
@@ -1450,7 +1457,7 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 			switch format {
 			case FormatYAML:
 				if err := yaml.Unmarshal(yamlData, &m); err != nil {
-					return cty.NilVal, err
+					return cty.NilVal, xerrors.Errorf("unmarshalling yaml: %w", err)
 				}
 			case FormatText:
 				if key == "" {
@@ -1476,7 +1483,7 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 			}
 
 			if err := mergo.Merge(&merged, m, mergo.WithOverride, mergo.WithOverwriteWithEmptyValue); err != nil {
-				return cty.NilVal, err
+				return cty.NilVal, xerrors.Errorf("merging maps: %w", err)
 			}
 		}
 
@@ -1491,17 +1498,17 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 
 		yamlData, err := yaml.Marshal(merged)
 		if err != nil {
-			return cty.NilVal, err
+			return cty.NilVal, xerrors.Errorf("generating yaml: %w", err)
 		}
 
 		ty, err := ctyyaml.ImpliedType(yamlData)
 		if err != nil {
-			return cty.DynamicVal, err
+			return cty.DynamicVal, xerrors.Errorf("determining type of %s: %w", string(yamlData), err)
 		}
 
 		v, err := ctyyaml.Unmarshal(yamlData, ty)
 		if err != nil {
-			return cty.DynamicVal, err
+			return cty.DynamicVal, xerrors.Errorf("unmarshalling %s: %w", string(yamlData), err)
 		}
 
 		confFields[confSpec.Name] = v
@@ -1527,6 +1534,7 @@ func addVariables(varCtx *hcl2.EvalContext, varSpecs []Variable) (*hcl2.EvalCont
 			}
 		}
 
+		//nolint:nestif
 		if tpe.IsListType() && tpe.ListElementType().Equals(cty.String) {
 			var v []string
 			if err := gohcl2.DecodeExpression(varSpec.Value, varCtx, &v); err != nil {
@@ -1597,12 +1605,12 @@ func getModule(ctx *hcl2.EvalContext, m1, m2 hcl2.Expression) (cty.Value, error)
 	}
 
 	fname := m.Range().Filename
+
 	mod, err := variantmod.New(
 		variantmod.ModuleFile(fmt.Sprintf("%s.variantmod", moduleName)),
 		variantmod.LockFile(fmt.Sprintf("%s.variantmod.lock", moduleName)),
 		variantmod.WD(filepath.Dir(fname)),
 	)
-
 	if err != nil {
 		return cty.NilVal, err
 	}

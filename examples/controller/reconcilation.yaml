@@ -1,0 +1,9 @@
+apiVersion: core.variant.run/v1beta1
+kind: Reconciliation
+metadata:
+  name: myresource-abc
+spec:
+  job: "apply"
+  resource:
+    env: preview
+    ref: abc2345

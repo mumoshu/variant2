@@ -15,6 +15,7 @@ func (app *App) runJobInBody(l *EventLogger, jobCtx *JobContext, body hcl.Body, 
 
 	sErr := gohcl.DecodeBody(body, jobCtx.evalContext, &lazyStaticRun)
 
+	//nolint:nestif
 	if sErr.HasErrors() {
 		var lazyDynamicRun LazyDynamicRun
 
@@ -61,7 +62,6 @@ func (app *App) runJobInBody(l *EventLogger, jobCtx *JobContext, body hcl.Body, 
 
 	for _, r := range runs {
 		res, err := app.runJobAndUpdateContext(l, jobCtx, r, new(sync.Mutex), streamOutput)
-
 		if err != nil {
 			return res, true, err
 		}

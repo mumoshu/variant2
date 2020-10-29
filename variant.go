@@ -12,12 +12,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mattn/go-isatty"
-
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
+	"github.com/mattn/go-isatty"
 	"github.com/mumoshu/variant2/pkg/app"
 	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
+	"golang.org/x/xerrors"
 )
 
 var Version string
@@ -52,13 +52,13 @@ func FromPath(path string, opts ...Option) Setup {
 
 			path, err = os.Getwd()
 			if err != nil {
-				return nil, err
+				return nil, xerrors.Errorf("getwd: %w", err)
 			}
 		}
 
 		info, err := os.Stat(path)
 		if err != nil {
-			return nil, err
+			return nil, xerrors.Errorf("stat %s: %w", path, err)
 		}
 
 		var setup app.Setup
@@ -283,7 +283,6 @@ func createCobraFlagsFromVariantOptions(cli *cobra.Command, opts []app.OptionSpe
 		}
 
 		if !app.IsExpressionEmpty(o.Default) || interactive {
-
 		} else if err := cli.MarkPersistentFlagRequired(o.Name); err != nil {
 			panic(err)
 		}
@@ -328,7 +327,6 @@ func configureCommand(cli *cobra.Command, root app.JobSpec, interactive bool) (*
 		ii := i
 
 		ty, err := typeexpr.TypeConstraint(p.Type)
-
 		if err != nil {
 			return nil, err
 		}
@@ -411,8 +409,8 @@ func getMergedParamsAndOpts(
 	}
 
 	cfg := cfgs[cmdName]
-	params, err := cfg.Parameters(args)
 
+	params, err := cfg.Parameters(args)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -430,6 +428,8 @@ func (m *Main) initApp(setup app.Setup) (*app.App, error) {
 	ap, err := app.New(setup)
 	if err != nil {
 		ap.PrintError(err)
+
+		//nolint:wrapcheck
 		return nil, err
 	}
 
@@ -496,20 +496,19 @@ func (m Main) initRunner(r *Runner) {
 				}
 
 				r, err := r.ap.Run(n, st.Parameters, st.Options)
-
 				if err != nil {
-					return err
+					return xerrors.Errorf("running job %q: %w", n, err)
 				}
 
 				if st.Stdout != nil {
 					if _, err := st.Stdout.Write([]byte(r.Stdout)); err != nil {
-						return err
+						return xerrors.Errorf("writing stdout of job %q: %w", n, err)
 					}
 				}
 
 				if st.Stderr != nil {
 					if _, err := st.Stderr.Write([]byte(r.Stderr)); err != nil {
-						return err
+						return xerrors.Errorf("writing stderr of job %q: %w", n, err)
 					}
 				}
 
@@ -620,7 +619,6 @@ func (r *Runner) Cobra() (*cobra.Command, error) {
 		}
 
 		cfg, err := configureCommand(cli, job, r.Interactive)
-
 		if err != nil {
 			return nil, err
 		}
@@ -637,6 +635,7 @@ func (r *Runner) Cobra() (*cobra.Command, error) {
 				cmd.SilenceUsage = true
 			}
 
+			//nolint:wrapcheck
 			return err
 		}
 		commands[name] = cli
@@ -660,7 +659,7 @@ type RunOptions struct {
 	DisableLocking bool
 }
 
-// Add adds a job to this runner so that it can later by calling `Job`
+// Add adds a job to this runner so that it can later by calling `Job`.
 func (r Runner) Add(job Job) {
 	r.goJobs[job.Name] = job
 
@@ -675,7 +674,7 @@ func (r Runner) Add(job Job) {
 	}
 }
 
-// Job prepares a job to be run
+// Job prepares a job to be run.
 func (r Runner) Job(job string, opts State) (JobRun, error) {
 	f, ok := r.jobRunProviders[job]
 	if !ok {
@@ -771,6 +770,7 @@ func (r *Runner) Run(arguments []string, opt ...RunOptions) error {
 		r.ap.Stderr = appStderr
 	}
 
+	//nolint:wrapcheck
 	return err
 }
 
@@ -803,6 +803,8 @@ func (r *Runner) createVariantRootCommand() *cobra.Command {
 			if err != nil {
 				c.SilenceUsage = true
 			}
+
+			//nolint:wrapcheck
 			return err
 		},
 	}
@@ -820,6 +822,8 @@ func (r *Runner) createVariantRootCommand() *cobra.Command {
 				if err != nil {
 					c.SilenceUsage = true
 				}
+
+				//nolint:wrapcheck
 				return err
 			},
 		}
@@ -843,6 +847,7 @@ func (r *Runner) createVariantRootCommand() *cobra.Command {
 				if err != nil {
 					c.SilenceUsage = true
 				}
+
 				return err
 			},
 		}
@@ -865,6 +870,7 @@ func (r *Runner) createVariantRootCommand() *cobra.Command {
 				if err != nil {
 					c.SilenceUsage = true
 				}
+
 				return err
 			},
 		}

@@ -80,6 +80,7 @@ func (app *App) newLogCollector(file string, j JobSpec, jobCtx *JobContext) LogC
 					return err
 				}
 			}
+
 			return nil
 		},
 	}

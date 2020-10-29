@@ -27,8 +27,10 @@ import (
 // suitable for passing to testing.MainStart.
 type TestDeps struct{}
 
-var matchPat string
-var matchRe *regexp.Regexp
+var (
+	matchPat string
+	matchRe  *regexp.Regexp
+)
 
 func (TestDeps) MatchString(pat, str string) (result bool, err error) {
 	if matchRe == nil || matchPat != pat {

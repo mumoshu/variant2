@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	variant "github.com/mumoshu/variant2"
+	"golang.org/x/xerrors"
 )
 
 // Building the binary with `go build -o myapp main.go`
@@ -25,8 +26,8 @@ job "test" {
   }
 }
 `
-	err := variant.MustLoad(variant.FromSource("myapp", source)).Run([]string{"test"})
 
+	err := variant.MustLoad(variant.FromSource("myapp", source)).Run([]string{"test"})
 	if err != nil {
 		panic(err)
 	}
@@ -131,7 +132,6 @@ func TestExtensionWithGo(t *testing.T) {
 					Stderr:     stderrW,
 				}
 				j, err := myapp.Job("app deploy", subst)
-
 				if err != nil {
 					return err
 				}
@@ -146,7 +146,7 @@ func TestExtensionWithGo(t *testing.T) {
 				}
 
 				if _, err := s.Stdout.Write([]byte("OUTPUT: " + o.String())); err != nil {
-					return err
+					return xerrors.Errorf("writing stdout: %w", err)
 				}
 
 				e, err := errs()
@@ -155,7 +155,7 @@ func TestExtensionWithGo(t *testing.T) {
 				}
 
 				if _, err := s.Stderr.Write([]byte("ERROR: " + e.String())); err != nil {
-					return err
+					return xerrors.Errorf("writing stderr: %w", err)
 				}
 
 				return nil

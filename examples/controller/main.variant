@@ -1,0 +1,21 @@
+option "env" {
+  type = string
+}
+
+option "ref" {
+  type = string
+}
+
+job "apply" {
+  exec {
+    command = "echo"
+    args = ["Deploying ${opt.ref} to ${opt.env}"]
+  }
+}
+
+job "destroy" {
+  exec {
+    command = "echo"
+    args = ["Destroying ${opt.env}"]
+  }
+}

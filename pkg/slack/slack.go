@@ -9,6 +9,7 @@ import (
 
 	"github.com/nlopes/slack"
 	"github.com/rs/xid"
+	"golang.org/x/xerrors"
 )
 
 const (
@@ -90,12 +91,12 @@ func (conn *Connection) Notify(n Notification) error {
 		Markdown: true,
 	}
 
-	respChannel, respTs, err := conn.Client.PostMessage(conn.Channel, slack.MsgOptionPostMessageParameters(params), slack.MsgOptionAttachments(attachment))
+	respChannel, respTS, err := conn.Client.PostMessage(conn.Channel, slack.MsgOptionPostMessageParameters(params), slack.MsgOptionAttachments(attachment))
 	if err != nil {
-		return err
+		return xerrors.Errorf("posting message: %w", err)
 	}
 
-	fmt.Printf("respCHannel=%s, respTs=%s", respChannel, respTs)
+	fmt.Printf("respCHannel=%s, respTS=%s", respChannel, respTS)
 
 	return nil
 }
@@ -142,12 +143,12 @@ func (conn *Connection) Select(sel Selection) (*string, error) {
 		Markdown: true,
 	}
 
-	respChannel, respTs, err := conn.Client.PostMessage(conn.Channel, slack.MsgOptionPostMessageParameters(params), slack.MsgOptionAttachments(attachment))
+	respChannel, respTS, err := conn.Client.PostMessage(conn.Channel, slack.MsgOptionPostMessageParameters(params), slack.MsgOptionAttachments(attachment))
 	if err != nil {
-		return nil, err
+		return nil, xerrors.Errorf("posting message: %w", err)
 	}
 
-	fmt.Printf("respCHannel=%s, respTs=%s", respChannel, respTs)
+	fmt.Printf("respCHannel=%s, respTS=%s", respChannel, respTS)
 
 	// Wait for selection
 
@@ -293,7 +294,7 @@ func (conn *Connection) Run() error {
 				cmd.ChannelID,
 				// Commented-out as this resulted in mesage_not_found error in the later phase, which seemed to indicate that
 				// we cant update the non-ephemeral response after it's posted.
-				//slack.MsgOptionResponseURL(cmd.ResponseURL, slack.ResponseTypeInChannel),
+				// slack.MsgOptionResponseURL(cmd.ResponseURL, slack.ResponseTypeInChannel),
 				slack.MsgOptionText(fmt.Sprintf("@%s triggered `%s`", cmd.UserName, userInput), false),
 			)
 			if err != nil {
@@ -318,6 +319,7 @@ func (conn *Connection) Run() error {
 			)
 			if err != nil {
 				fmt.Printf("async response 3 error: %v", err)
+
 				return
 			}
 		}()

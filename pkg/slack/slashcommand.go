@@ -24,7 +24,6 @@ func (h slashCommandsHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 
 	cmd, err := slack.SlashCommandParse(r)
-
 	if err != nil {
 		log.Printf("[ERROR] failed to parse slash command: %v", err)
 		w.WriteHeader(http.StatusBadRequest)

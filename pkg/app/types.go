@@ -86,7 +86,7 @@ type EnvSource struct {
 type SourceJob struct {
 	Name string `hcl:"name,attr"`
 	// This results in "no cty.Type for hcl.Expression" error
-	//Arguments map[string]hcl2.Expression `hcl:"args,attr"`
+	// Arguments map[string]hcl2.Expression `hcl:"args,attr"`
 	Args   hcl.Expression `hcl:"args,attr"`
 	Format *string        `hcl:"format,attr"`
 	Key    *string        `hcl:"key,attr"`
@@ -109,7 +109,7 @@ type Variable struct {
 }
 
 type JobSpec struct {
-	//Type string `hcl:"type,label"`
+	// Type string `hcl:"type,label"`
 	Name string `hcl:"name,label"`
 
 	Version *string `hcl:"version,attr"`

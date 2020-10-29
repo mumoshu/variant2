@@ -1,11 +1,12 @@
 module github.com/mumoshu/variant2
 
-go 1.13
+go 1.15
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.0.5
 	github.com/PaesslerAG/jsonpath v0.1.1 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
+	github.com/go-logr/logr v0.1.0
 	github.com/go-playground/universal-translator v0.17.0 // indirect
 	github.com/google/go-cmp v0.4.0
 	github.com/google/go-github/v27 v27.0.6 // indirect
@@ -26,6 +27,7 @@ require (
 	github.com/rs/xid v1.2.1
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/summerwind/whitebox-controller v0.7.1
 	github.com/tidwall/gjson v1.3.5
 	github.com/twpayne/go-vfs v1.3.6 // indirect
 	github.com/ulikunitz/xz v0.5.6 // indirect
@@ -37,10 +39,18 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/zclconf/go-cty v1.2.1
 	github.com/zclconf/go-cty-yaml v1.0.1
-	golang.org/x/crypto v0.0.0-20200214034016-1d94cc7ab1c6 // indirect
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
 	golang.org/x/tools v0.0.0-20200331025713-a30bf2db82d4 // indirect
+	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+	k8s.io/api v0.18.9 // indirect
+	k8s.io/apiextensions-apiserver v0.18.9 // indirect
+	k8s.io/apimachinery v0.18.9
+	k8s.io/cli-runtime v0.18.9 // indirect
+	k8s.io/client-go v0.18.9
 	k8s.io/klog v1.0.0 // indirect
+	sigs.k8s.io/controller-runtime v0.6.3
 )
+
+replace github.com/summerwind/whitebox-controller v0.7.1 => github.com/mumoshu/whitebox-controller v0.5.1-0.20201028130131-ac7a0743254b

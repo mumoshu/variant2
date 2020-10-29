@@ -172,8 +172,9 @@ func ctyTupleToGo(tuple cty.Value) (interface{}, error) {
 		if lastElemType == nil {
 			lastElemType = t
 		} else if !lastElemType.Equals(*t) {
-			//return nil, fmt.Errorf("handler for tuple with varying element types is not implemented yet: %v", v)
+			// return nil, fmt.Errorf("handler for tuple with varying element types is not implemented yet: %v", v)
 			typeVaries = true
+
 			break
 		}
 	}

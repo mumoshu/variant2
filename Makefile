@@ -16,15 +16,17 @@ test: build
 	PATH=$(PWD):$(PATH) go test -race -v ./...
 
 bin/golangci-lint:
-	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s v1.23.1
+	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s v1.32.0
 
 .PHONY: lint
 lint: bin/golangci-lint
-	bin/golangci-lint run --tests \
+	bin/golangci-lint run --tests ./... \
+	  --timeout 5m \
 	  --enable-all \
 	  --disable gochecknoglobals \
 	  --disable gochecknoinits \
-	  --disable gomnd,funlen,prealloc,gocritic,lll,gocognit
+	  --disable gomnd,funlen,prealloc,gocritic,lll,gocognit \
+	  --disable testpackage,goerr113,exhaustivestruct,wrapcheck
 
 .PHONY: smoke
 smoke: export GOBIN=$(shell pwd)/tools
@@ -44,7 +46,11 @@ smoke: build
 	grep "Namespace to interact with" smoke2.log
 
 	rm -rf build/import-multi
-	VARIANT_BUILD_VER=v0.0.0 VARIANT_BUILD_REPLACE=$(shell pwd) PATH=${PATH}:$(GOBIN) ./variant export binary examples/advanced/import-multi build/import-multi
+	VARIANT_BUILD_VER=v0.0.0 \
+	  VARIANT_BUILD_VARIANT_REPLACE=$(shell pwd) \
+	  VARIANT_BUILD_MOD_REPLACE="github.com/summerwind/whitebox-controller@v0.7.1=github.com/mumoshu/whitebox-controller@v0.5.1-0.20201028130131-ac7a0743254b" \
+	  PATH=${PATH}:$(GOBIN) \
+	  ./variant export binary examples/advanced/import-multi build/import-multi
 	build/import-multi foo baz HELLO > build/import-multi.log
 	bash -c 'diff <(echo HELLO) <(cat build/import-multi.log)'
 

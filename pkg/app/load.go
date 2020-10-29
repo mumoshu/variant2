@@ -7,14 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	fs2 "github.com/mumoshu/variant2/pkg/fs"
-
-	"github.com/hashicorp/hcl/v2/ext/typeexpr"
-
 	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/mumoshu/variant2/pkg/conf"
+	fs2 "github.com/mumoshu/variant2/pkg/fs"
 	"github.com/variantdev/mod/pkg/depresolver"
 	"github.com/zclconf/go-cty/cty"
 )
@@ -220,6 +218,7 @@ func findVariantFiles(fs *fs2.FileSystem, cacheDir string, dirPathOrURL string) 
 
 	s := strings.Split(dirPathOrURL, "::")
 
+	//nolint:nestif
 	if len(s) > 1 {
 		forcePrefix := s[0]
 
@@ -272,7 +271,7 @@ func findVariantFiles(fs *fs2.FileSystem, cacheDir string, dirPathOrURL string) 
 
 	files, err := conf.FindVariantFiles(fs, dir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get %s files: %v", conf.VariantFileExt, err)
+		return nil, fmt.Errorf("failed to get %s files: %w", conf.VariantFileExt, err)
 	}
 
 	return files, nil
@@ -284,7 +283,6 @@ func newConfigFromSources(srcs map[string][]byte) (map[string]*hcl.File, *HCL2Co
 	}
 
 	c, nameToFiles, err := l.loadSources(srcs)
-
 	if err != nil {
 		return nameToFiles, nil, err
 	}
@@ -315,10 +313,10 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 			importSources = append(importSources, *j.Import)
 		}
 
+		//nolint:nestif
 		if len(importSources) > 0 {
 			for _, src := range importSources {
 				a, err := importDir(src)
-
 				if err != nil {
 					return nil, err
 				}
