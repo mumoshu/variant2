@@ -174,6 +174,12 @@ func main() {
 	}
 
 	modReplace := os.Getenv("VARIANT_BUILD_MOD_REPLACE")
+
+	if modReplace == "" {
+		// Required until https://github.com/summerwind/whitebox-controller/pull/8 is merged
+		modReplace = "github.com/summerwind/whitebox-controller@v0.7.1=github.com/mumoshu/whitebox-controller@v0.5.1-0.20201028130131-ac7a0743254b"
+	}
+
 	if modReplace != "" {
 		_, err = app.execCmd(
 			Command{
