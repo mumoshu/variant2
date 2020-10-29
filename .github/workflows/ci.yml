@@ -6,14 +6,14 @@ jobs:
     strategy:
       matrix:
         go:
-        - 1.15
+        - 1.15.x
     name: Go ${{ matrix.go }} build
     steps:
     - uses: actions/checkout@master
     - name: Setup Go
       uses: actions/setup-go@v1
       with:
-        version: ${{ matrix.go }}
+        go-version: ${{ matrix.go }}
     - name: Run go mod download
       run: go mod download
     - name: Install SSH key
@@ -32,14 +32,14 @@ jobs:
     strategy:
       matrix:
         go:
-        - 1.15
+        - 1.15.x
     name: Go ${{ matrix.go }} build
     steps:
     - uses: actions/checkout@master
     - name: Setup Go
       uses: actions/setup-go@v1
       with:
-        version: ${{ matrix.go }}
+        go-version: ${{ matrix.go }}
     - name: Run go mod download
       run: go mod download
     - name: Run golangci-lint
