@@ -21,6 +21,7 @@ bin/golangci-lint:
 .PHONY: lint
 lint: bin/golangci-lint
 	bin/golangci-lint run --tests ./... \
+	  --timeout 2m \
 	  --enable-all \
 	  --disable gochecknoglobals \
 	  --disable gochecknoinits \
