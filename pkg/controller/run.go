@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -48,42 +47,9 @@ func Run(run func([]string) (string, error)) (finalErr error) {
 		return xerrors.Errorf("getting kubernetes client config: %w", err)
 	}
 
-	getEnv := func(n string) (string, string) {
-		name := EnvPrefix + n
-		value := os.Getenv(name)
-
-		return name, value
-	}
-
-	controllerNameEnv, controllerName := getEnv("NAME")
-	if controllerName == "" {
-		return fmt.Errorf("missing required environment variable: %s", controllerNameEnv)
-	}
-
-	_, forAPIVersion := getEnv("FOR_API_VERSION")
-	if forAPIVersion == "" {
-		forAPIVersion = coreGroup + "/" + coreVersion
-	}
-
-	_, forKind := getEnv("FOR_KIND")
-	if forKind == "" {
-		forKind = "Resource"
-	}
-
-	_, resyncPeriod := getEnv("RESYNC_PERIOD")
-
-	groupVersion := strings.Split(forAPIVersion, "/")
-	group := groupVersion[0]
-	version := groupVersion[1]
-
-	jobOnApplyEnv, jobOnApply := getEnv("JOB_ON_APPLY")
-	if jobOnApply == "" {
-		return fmt.Errorf("missing required environment variable: %s", jobOnApplyEnv)
-	}
-
-	jobOnDestroyEnv, jobOnDestroy := getEnv("JOB_ON_DESTROY")
-	if jobOnDestroy == "" {
-		return fmt.Errorf("missing required environment variable: %s", jobOnDestroyEnv)
+	conf, err := getConfigFromEnv()
+	if err != nil {
+		return xerrors.Errorf("getting config from envvars: %w", err)
 	}
 
 	podName, err := os.Hostname()
@@ -92,11 +58,11 @@ func Run(run func([]string) (string, error)) (finalErr error) {
 	}
 
 	ctl := &controller{
-		log:            logf.Log.WithName(controllerName),
+		log:            logf.Log.WithName(conf.controllerName),
 		runtimeClient:  nil,
 		run:            run,
 		podName:        podName,
-		controllerName: controllerName,
+		controllerName: conf.controllerName,
 	}
 
 	handle := func(st *state.State, job string) (finalErr error) {
@@ -104,21 +70,21 @@ func Run(run func([]string) (string, error)) (finalErr error) {
 	}
 
 	applyHandler := StateHandlerFunc(func(st *state.State) error {
-		return handle(st, jobOnApply)
+		return handle(st, conf.jobOnApply)
 	})
 
 	destroyHandler := StateHandlerFunc(func(st *state.State) error {
-		return handle(st, jobOnDestroy)
+		return handle(st, conf.jobOnDestroy)
 	})
 
-	c := &config.Config{
-		Name: controllerName,
+	whiteboxConfig := &config.Config{
+		Name: conf.controllerName,
 		Resources: []*config.ResourceConfig{
 			{
 				GroupVersionKind: schema.GroupVersionKind{
-					Group:   group,
-					Version: version,
-					Kind:    forKind,
+					Group:   conf.group,
+					Version: conf.version,
+					Kind:    conf.forKind,
 				},
 				Reconciler: &config.ReconcilerConfig{
 					HandlerConfig: config.HandlerConfig{
@@ -128,13 +94,13 @@ func Run(run func([]string) (string, error)) (finalErr error) {
 				Finalizer: &config.HandlerConfig{
 					StateHandler: destroyHandler,
 				},
-				ResyncPeriod: resyncPeriod,
+				ResyncPeriod: conf.resyncPeriod,
 			},
 		},
 		Webhook: nil,
 	}
 
-	mgr, err := manager.New(c, kc)
+	mgr, err := manager.New(whiteboxConfig, kc)
 	if err != nil {
 		return xerrors.Errorf("creating controller-manager: %w", err)
 	}
