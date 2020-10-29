@@ -16,7 +16,7 @@ test: build
 	PATH=$(PWD):$(PATH) go test -race -v ./...
 
 bin/golangci-lint:
-	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s v1.23.1
+	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s v1.32.0
 
 .PHONY: lint
 lint: bin/golangci-lint
