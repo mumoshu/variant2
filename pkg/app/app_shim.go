@@ -160,12 +160,27 @@ func main() {
 		}
 	}
 
-	variantReplace := os.Getenv("VARIANT_BUILD_REPLACE")
+	variantReplace := os.Getenv("VARIANT_BUILD_VARIANT_REPLACE")
 	if variantReplace != "" {
 		_, err = app.execCmd(
 			Command{
 				Name: "sh",
 				Args: []string{"-c", fmt.Sprintf("cd %s; go mod edit -replace github.com/mumoshu/variant2@%s=%s", dstDir, variantVer, variantReplace)},
+				Env:  map[string]string{},
+			},
+			true,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	modReplace := os.Getenv("VARIANT_BUILD_MOD_REPLACE")
+	if modReplace != "" {
+		_, err = app.execCmd(
+			Command{
+				Name: "sh",
+				Args: []string{"-c", fmt.Sprintf("cd %s; go mod edit -replace %s", dstDir, modReplace)},
 				Env:  map[string]string{},
 			},
 			true,
