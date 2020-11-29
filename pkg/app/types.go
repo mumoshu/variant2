@@ -234,10 +234,6 @@ type App struct {
 
 	Trace string
 
-	execInvocationCount int
-
-	expectedExecs []expectedExec
-
 	sourceClient *source.Client
 
 	initMu sync.Mutex

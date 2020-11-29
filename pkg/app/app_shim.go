@@ -37,6 +37,7 @@ func (app *App) ExportBinary(srcDir, dstFile string) error {
 	}
 
 	_, err = app.execCmd(
+		nil,
 		Command{
 			Name: "sh",
 			Args: []string{"-c", fmt.Sprintf("cd %s; go build -o %s %s", tmpDir, absDstFile, tmpDir)},
@@ -133,6 +134,7 @@ func main() {
 	}
 
 	_, err = app.execCmd(
+		nil,
 		Command{
 			Name: "sh",
 			Args: []string{"-c", fmt.Sprintf("cd %s; go mod init %s && go get github.com/rakyll/statik && statik -src=%s", dstDir, moduleName, fs.VendorPrefix)},
@@ -147,6 +149,7 @@ func main() {
 	variantVer := os.Getenv("VARIANT_BUILD_VER")
 	if variantVer != "" {
 		_, err = app.execCmd(
+			nil,
 			Command{
 				Name: "sh",
 				Args: []string{"-c", fmt.Sprintf("cd %s; go mod edit -require=github.com/mumoshu/variant2@%s", dstDir, variantVer)},
@@ -162,6 +165,7 @@ func main() {
 	variantReplace := os.Getenv("VARIANT_BUILD_VARIANT_REPLACE")
 	if variantReplace != "" {
 		_, err = app.execCmd(
+			nil,
 			Command{
 				Name: "sh",
 				Args: []string{"-c", fmt.Sprintf("cd %s; go mod edit -replace github.com/mumoshu/variant2@%s=%s", dstDir, variantVer, variantReplace)},
@@ -192,6 +196,7 @@ func main() {
 
 	for _, modReplace := range modReplaces {
 		_, err = app.execCmd(
+			nil,
 			Command{
 				Name: "sh",
 				Args: []string{"-c", fmt.Sprintf("cd %s; go mod edit -replace %s", dstDir, modReplace)},

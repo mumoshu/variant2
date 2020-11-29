@@ -50,7 +50,7 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 		f = fs[0]
 	}
 
-	jr, err := app.Job(nil, cmd, args, opts, f, true)
+	jr, err := app.Job(nil, nil, cmd, args, opts, f, true)
 	if err != nil {
 		return nil, err
 	}
@@ -63,14 +63,14 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 	return res, nil
 }
 
-func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, streamOutput bool) (*Result, error) {
+func (app *App) run(jobCtx *JobContext, l *EventLogger, cmd string, args map[string]interface{}, streamOutput bool) (*Result, error) {
 	if l != nil {
 		if err := l.LogRun(cmd, args); err != nil {
 			return nil, err
 		}
 	}
 
-	jr, err := app.Job(l, cmd, args, args, nil, streamOutput)
+	jr, err := app.Job(jobCtx, l, cmd, args, args, nil, streamOutput)
 	if err != nil {
 		if cmd != "" {
 			return nil, xerrors.Errorf("job %q: %w", cmd, err)
@@ -91,7 +91,7 @@ func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, str
 	return res, nil
 }
 
-func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}, f SetOptsFunc, streamOutput bool) (func() (*Result, error), error) {
+func (app *App) Job(jobCtx *JobContext, l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}, f SetOptsFunc, streamOutput bool) (func() (*Result, error), error) {
 	jobByName := app.JobByName
 
 	j, cmdDefined := jobByName[cmd]
@@ -107,12 +107,21 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 	return func() (*Result, error) {
 		cc := app.Config
 
+		// execMatcher is the only object that is inherited from the parent to the child jobContext
+		var execMatcher *execMatcher
+
+		if jobCtx != nil {
+			execMatcher = jobCtx.execMatcher
+		}
+
 		jobCtx, err := app.createJobContext(cc, j, args, opts, f)
 		if err != nil {
 			app.PrintError(err)
 
 			return nil, err
 		}
+
+		jobCtx.execMatcher = execMatcher
 
 		jobEvalCtx := jobCtx.evalContext
 
@@ -296,33 +305,43 @@ type Command struct {
 	Interactive bool
 }
 
-func (app *App) execCmd(cmd Command, log bool) (*Result, error) {
+func (app *App) execCmd(ctx *JobContext, cmd Command, log bool) (*Result, error) {
+	var execM *execMatcher
+
+	if ctx != nil {
+		execM = ctx.execMatcher
+	}
+
+	if execM == nil {
+		execM = &execMatcher{}
+	}
+
 	// If we have one ore more pending exec expectations, never run the actual command.
 	// Instead, do validate the execCmd run against the expectation.
-	if len(app.expectedExecs) > 0 {
-		app.execInvocationCount++
+	if len(execM.expectedExecs) > 0 {
+		execM.execInvocationCount++
 
-		expectation := app.expectedExecs[0]
+		expectation := execM.expectedExecs[0]
 
 		if cmd.Name != expectation.Command {
-			return nil, fmt.Errorf("unexpected exec %d: expected command %q, got %q", app.execInvocationCount, expectation.Command, cmd.Name)
+			return nil, fmt.Errorf("unexpected exec %d: expected command %q, got %q", execM.execInvocationCount, expectation.Command, cmd.Name)
 		}
 
 		if diff := cmp.Diff(expectation.Args, cmd.Args); diff != "" {
-			return nil, fmt.Errorf("unexpected exec %d: expected args %v, got %v", app.execInvocationCount, expectation.Args, cmd.Args)
+			return nil, fmt.Errorf("unexpected exec %d: expected args %v, got %v", execM.execInvocationCount, expectation.Args, cmd.Args)
 		}
 
 		if diff := cmp.Diff(expectation.Dir, cmd.Dir); diff != "" {
-			return nil, fmt.Errorf("unexpected exec %d: expected dir %q, got %q", app.execInvocationCount, expectation.Dir, cmd.Dir)
+			return nil, fmt.Errorf("unexpected exec %d: expected dir %q, got %q", execM.execInvocationCount, expectation.Dir, cmd.Dir)
 		}
 
 		// Pop the successful command expectation so that on next execCmd call, we can
 		// use expectedExecs[0] as the next expectation to be checked.
-		app.expectedExecs = app.expectedExecs[1:]
+		execM.expectedExecs = execM.expectedExecs[1:]
 
 		return &Result{Validated: true}, nil
-	} else if app.execInvocationCount > 0 {
-		return nil, fmt.Errorf("unexpected exec %d: fix the test by adding an expect block for this exec, or fix the test target: %v", app.execInvocationCount+1, cmd)
+	} else if execM.execInvocationCount > 0 {
+		return nil, fmt.Errorf("unexpected exec %d: fix the test by adding an expect block for this exec, or fix the test target: %v", execM.execInvocationCount+1, cmd)
 	}
 
 	env := map[string]string{}
@@ -465,7 +484,7 @@ func (app *App) execJob(l *EventLogger, j JobSpec, jobCtx *JobContext, streamOut
 			c.Interactive = true
 		}
 
-		res, err = app.execCmd(c, streamOutput)
+		res, err = app.execCmd(jobCtx, c, streamOutput)
 		if err := l.LogExec(cmd, args); err != nil {
 			return nil, err
 		}
@@ -717,9 +736,10 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 	jobCtx := &JobContext{
 		evalContext: ctx,
 		globalArgs:  map[string]interface{}{},
+		execMatcher: &execMatcher{},
 	}
 
-	app.expectedExecs = nil
+	expectedExecs := []expectedExec{}
 
 	for _, e := range t.ExpectedExecs {
 		var cmd string
@@ -742,12 +762,14 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 			}
 		}
 
-		app.expectedExecs = append(app.expectedExecs, expectedExec{
+		expectedExecs = append(expectedExecs, expectedExec{
 			Command: cmd,
 			Args:    args,
 			Dir:     dir,
 		})
 	}
+
+	jobCtx.execMatcher.expectedExecs = expectedExecs
 
 	res, err := app.runJobAndUpdateContext(nil, jobCtx, eitherJobRun{static: &t.Run}, new(sync.Mutex), true)
 
@@ -849,7 +871,7 @@ func (app *App) dispatchRunJob(l *EventLogger, jobCtx *JobContext, run eitherJob
 		}
 	}
 
-	return app.run(l, jobRun.Name, jobRun.Args, streamOutput)
+	return app.run(jobCtx, l, jobRun.Name, jobRun.Args, streamOutput)
 }
 
 func cloneEvalContext(c *hcl2.EvalContext) *hcl2.EvalContext {
@@ -904,7 +926,7 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn, s
 				return nil, err
 			}
 
-			res, err := app.run(l, r.Name, args, streamOutput)
+			res, err := app.run(jobCtx, l, r.Name, args, streamOutput)
 			if err != nil {
 				return res, err
 			}
@@ -925,7 +947,7 @@ func (app *App) execMultiRun(l *EventLogger, jobCtx *JobContext, r *DependsOn, s
 		return nil, err
 	}
 
-	res, err := app.run(l, r.Name, args, streamOutput)
+	res, err := app.run(jobCtx, l, r.Name, args, streamOutput)
 	if err != nil {
 		return res, err
 	}
@@ -1247,6 +1269,13 @@ type JobContext struct {
 	evalContext *hcl2.EvalContext
 
 	globalArgs map[string]interface{}
+
+	execMatcher *execMatcher
+}
+
+type execMatcher struct {
+	execInvocationCount int
+	expectedExecs       []expectedExec
 }
 
 func (c *JobContext) WithEvalContext(evalCtx *hcl2.EvalContext) JobContext {
@@ -1457,7 +1486,7 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 					return cty.NilVal, err
 				}
 
-				res, err := app.run(nil, source.Name, args, false)
+				res, err := app.run(jobCtx, nil, source.Name, args, false)
 				if err != nil {
 					return cty.NilVal, xerrors.Errorf("%s %q: source %d: %w", confType, confSpec.Name, sourceIdx, err)
 				}
