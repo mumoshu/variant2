@@ -624,9 +624,7 @@ func (app *App) execTest(t *testing.T, test Test) *Result {
 		t.Run(c.Name, func(t *testing.T) {
 			var err error
 
-			testApp := app.ShallowCopy().Ptr()
-
-			res, err = testApp.execTestCase(test, c)
+			res, err = app.execTestCase(test, c)
 			if err != nil {
 				app.PrintError(err)
 				t.Fatalf("%s: %v", c.SourceLocator.Range(), err)

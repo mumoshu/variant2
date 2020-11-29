@@ -2,6 +2,7 @@ package app
 
 import (
 	"io"
+	"sync"
 
 	"github.com/hashicorp/hcl/v2"
 
@@ -238,12 +239,6 @@ type App struct {
 	expectedExecs []expectedExec
 
 	sourceClient *source.Client
-}
 
-func (app *App) ShallowCopy() App {
-	return *app
-}
-
-func (app App) Ptr() *App {
-	return &app
+	initMu sync.Mutex
 }

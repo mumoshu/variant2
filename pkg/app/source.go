@@ -7,11 +7,33 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/xerrors"
+
+	"github.com/mumoshu/variant2/pkg/kube"
+	"github.com/mumoshu/variant2/pkg/source"
 )
 
 func (app *App) checkoutSources(_ *EventLogger, jobCtx *JobContext, sources []Source, concurrency int) error {
 	if len(sources) == 0 {
 		return nil
+	}
+
+	if app.sourceClient == nil {
+		err := func() error {
+			app.initMu.Lock()
+			defer app.initMu.Unlock()
+
+			client, err := kube.NewClient()
+			if err != nil {
+				return err
+			}
+
+			app.sourceClient = &source.Client{Client: client}
+
+			return nil
+		}()
+		if err != nil {
+			return err
+		}
 	}
 
 	type result struct {

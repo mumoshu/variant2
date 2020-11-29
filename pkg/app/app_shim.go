@@ -181,9 +181,7 @@ func main() {
 	if modReplace != "" {
 		reps := strings.Split(modReplace, ",")
 
-		for _, rep := range reps {
-			modReplaces = append(modReplaces, rep)
-		}
+		modReplaces = append(modReplaces, reps...)
 	}
 
 	// Required until https://github.com/summerwind/whitebox-controller/pull/8 is merged

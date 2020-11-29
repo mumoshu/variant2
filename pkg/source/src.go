@@ -24,16 +24,11 @@ type Client struct {
 // FetchTarball returns an io.ReadCloser that contains the http response body on successful request.
 // It's the user's responsibility to close any non-nil ReadCloser otherwise the
 // original http.Response.Body leaks.
-func (c *Client) FetchTarball(url string) (io.ReadCloser, error) {
+func (c *Client) FetchTarball(ctx context.Context, url string) (io.ReadCloser, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request for %s, error: %w", url, err)
 	}
-
-	timeout := time.Second * 30
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-
-	defer cancel()
 
 	//nolint:bodyclose
 	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
@@ -49,7 +44,7 @@ func (c *Client) FetchTarball(url string) (io.ReadCloser, error) {
 }
 
 func (c *Client) DownloadTarball(tarballURL string, f io.Writer) error {
-	body, err := c.FetchTarball(tarballURL)
+	body, err := c.FetchTarball(context.Background(), tarballURL)
 
 	defer func() {
 		if body != nil {
@@ -69,7 +64,12 @@ func (c *Client) DownloadTarball(tarballURL string, f io.Writer) error {
 }
 
 func (c *Client) ExtractTarball(url, dir string) error {
-	body, err := c.FetchTarball(url)
+	timeout := time.Second * 30
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+
+	defer cancel()
+
+	body, err := c.FetchTarball(ctx, url)
 	if err != nil {
 		return xerrors.Errorf("fetching %s: %w", url, err)
 	}
@@ -130,8 +130,12 @@ func (c *Client) ExtractSource(ctx context.Context, kind, ns, name string) (stri
 		dir = filepath.Join(os.TempDir(), "variant", "cache", "source", fmt.Sprintf("%s-%s-%s", kind, ns, name))
 	}
 
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", xerrors.Errorf("creating source cache dir: %w", err)
+	}
+
 	if info, err := os.Stat(dir); info == nil {
-		return "", xerrors.Errorf("looking for source cahce: %w", err)
+		return "", xerrors.Errorf("looking for source cache: %w", err)
 	}
 
 	extErr := c.ExtractTarball(tarballURL, dir)

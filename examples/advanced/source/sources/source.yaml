@@ -1,0 +1,7 @@
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: GitRepository
+metadata:
+  name: myrepo
+spec:
+  url: "https://github.com/mumoshu/variant2"
+  interval: "30s"

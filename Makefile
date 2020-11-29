@@ -13,6 +13,17 @@ bin/goimports:
 	rm -rf $$INSTALL_TMP_DIR ;\
 	}
 
+bin/source-controller:
+	echo "Installing source-controller"
+	@{ \
+	set -e ;\
+	INSTALL_TMP_DIR=$$(mktemp -d) ;\
+	cd $$INSTALL_TMP_DIR ;\
+	go mod init tmp ;\
+	GOBIN=$(PWD)/bin go install github.com/fluxcd/source-controller ;\
+	rm -rf $$INSTALL_TMP_DIR ;\
+	}
+
 bin/gofumpt:
 	echo "Installing gofumpt"
 	@{ \
@@ -32,6 +43,26 @@ bin/gci:
 	cd $$INSTALL_TMP_DIR ;\
 	go mod init tmp ;\
 	GOBIN=$(PWD)/bin go install github.com/daixiang0/gci ;\
+	rm -rf $$INSTALL_TMP_DIR ;\
+	}
+
+.PHONY: source-controller-crds
+source-controller-crds:
+	# See https://stackoverflow.com/questions/600079/git-how-do-i-clone-a-subdirectory-only-of-a-git-repository/52269934#52269934
+	echo "Fetching source-controller crds"
+	@{ \
+	set -xe ;\
+	INSTALL_TMP_DIR=$$(mktemp -d) ;\
+	cd $$INSTALL_TMP_DIR ;\
+	git clone \
+    	  --depth 1 \
+    	  --filter=blob:none \
+    	  --no-checkout \
+    	  https://github.com/fluxcd/source-controller ;\
+	cd source-controller ;\
+	git checkout main -- config/crd/bases ;\
+	rm -rf .git ;\
+	cp config/crd/bases/* $(PWD)/examples/advanced/source/crds ;\
 	rm -rf $$INSTALL_TMP_DIR ;\
 	}
 

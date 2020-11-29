@@ -1,0 +1,37 @@
+job "example" {
+  source "myrepo" {
+    kind = "GitRepository"
+    namespace = "default"
+    name = "myrepo"
+  }
+
+  run "log" {
+    message = "Downloaded my repo into ${source.myrepo.dir}"
+  }
+
+  run "list-files" {
+    dir = source.myrepo.dir
+  }
+}
+
+job "log" {
+  parameter "message" {
+    type = string
+  }
+
+  exec {
+    command = "echo"
+    args = [param.message]
+  }
+}
+
+job "list-files" {
+  parameter "dir" {
+    type = string
+  }
+
+  exec {
+    command = "ls"
+    args = [param.dir]
+  }
+}
