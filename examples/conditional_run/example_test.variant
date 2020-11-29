@@ -37,7 +37,7 @@ test "example" {
     print_foo = false
     print_bar = false
     stdout = ""
-    err = "nothing to run"
+    err = "job \"example\": nothing to run"
     exitstatus = 1
   }
 
