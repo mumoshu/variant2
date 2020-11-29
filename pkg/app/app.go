@@ -54,7 +54,12 @@ func (app *App) Run(cmd string, args map[string]interface{}, opts map[string]int
 		return nil, err
 	}
 
-	return jr()
+	res, err := jr()
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
 
 func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, streamOutput bool) (*Result, error) {
@@ -66,17 +71,30 @@ func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, str
 
 	jr, err := app.Job(l, cmd, args, args, nil, streamOutput)
 	if err != nil {
+		if cmd != "" {
+			return nil, xerrors.Errorf("job %q: %w", cmd, err)
+		}
 		return nil, err
 	}
 
-	return jr()
+	res, err := jr()
+	if err != nil {
+		if cmd != "" {
+			return nil, xerrors.Errorf("job %q: %w", cmd, err)
+		}
+		return nil, err
+	}
+
+	return res, nil
 }
 
 func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opts map[string]interface{}, f SetOptsFunc, streamOutput bool) (func() (*Result, error), error) {
 	jobByName := app.JobByName
 
-	j, ok := jobByName[cmd]
-	if !ok {
+	j, cmdDefined := jobByName[cmd]
+	if !cmdDefined {
+		var ok bool
+
 		j, ok = jobByName[""]
 		if !ok {
 			return nil, fmt.Errorf("command %q not found", cmd)
@@ -213,7 +231,11 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 			}
 
 			if err == nil {
-				return nil, fmt.Errorf(NoRunMessage)
+				if !cmdDefined {
+					return nil, xerrors.Errorf("job %q is not defined", cmd)
+				}
+
+				return nil, errors.New(NoRunMessage)
 			}
 		} else {
 			// The job contained job or step(s).
@@ -602,7 +624,7 @@ func (app *App) execTest(t *testing.T, test Test) *Result {
 			res, err = testApp.execTestCase(test, c)
 			if err != nil {
 				app.PrintError(err)
-				t.Fatalf("%v", err)
+				t.Fatalf("%s: %v", c.SourceLocator.Range(), err)
 			}
 		})
 	}
@@ -967,7 +989,7 @@ func (app *App) execJobSteps(l *EventLogger, jobCtx *JobContext, results map[str
 		f := func() (*Result, error) {
 			res, err := app.runJobAndUpdateContext(l, &stepCtx, eitherJobRun{static: &s.Run}, m, streamOutput)
 			if err != nil {
-				return res, err
+				return res, xerrors.Errorf("step %q: %w", s.Name, err)
 			}
 
 			m.Lock()
@@ -1248,12 +1270,12 @@ func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[stri
 
 	globalParams, err := setParameterValues("global parameter", ctx, cc.Parameters, givenParams)
 	if err != nil {
-		return nil, fmt.Errorf("job %q: %w", j.Name, err)
+		return nil, err
 	}
 
 	localParams, err := setParameterValues("parameter", ctx, j.Parameters, givenParams)
 	if err != nil {
-		return nil, fmt.Errorf("job %q: %w", j.Name, err)
+		return nil, err
 	}
 
 	params := map[string]cty.Value{}
@@ -1275,12 +1297,12 @@ func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[stri
 
 	globalOpts, err := setOptionValues("global option", ctx, cc.Options, givenOpts, f)
 	if err != nil {
-		return nil, fmt.Errorf("job %q: %w", j.Name, err)
+		return nil, err
 	}
 
 	localOpts, err := setOptionValues("option", ctx, j.Options, givenOpts, f)
 	if err != nil {
-		return nil, fmt.Errorf("job %q: %w", j.Name, err)
+		return nil, err
 	}
 
 	opts := map[string]cty.Value{}
@@ -1410,7 +1432,7 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 				yamlData, err = ioutil.ReadFile(source.Path)
 				if err != nil {
 					if source.Default == nil {
-						return cty.NilVal, fmt.Errorf("job %q: %s %q: source %d: %w", j.Name, confType, confSpec.Name, sourceIdx, err)
+						return cty.NilVal, fmt.Errorf("%s %q: source %d: %w", confType, confSpec.Name, sourceIdx, err)
 					}
 
 					yamlData = []byte(*source.Default)
@@ -1434,7 +1456,7 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 
 				res, err := app.run(nil, source.Name, args, false)
 				if err != nil {
-					return cty.NilVal, err
+					return cty.NilVal, xerrors.Errorf("%s %q: source %d: %w", confType, confSpec.Name, sourceIdx, err)
 				}
 
 				yamlData = []byte(res.Stdout)

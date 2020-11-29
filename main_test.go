@@ -39,7 +39,7 @@ func TestExamples(t *testing.T) {
 			variantName: "simple",
 			args:        []string{"variant", "app", "deploy", "--namespace", "ns1"},
 			variantDir:  "./examples/simple",
-			expectErr:   "command \"bash -c     kubectl -n ns1 apply -f examples/simple/manifests/\n\": exit status 1",
+			expectErr:   "job \"shell\": command \"bash -c     kubectl -n ns1 apply -f examples/simple/manifests/\n\": exit status 1",
 		},
 		{
 			variantName: "simple",
@@ -50,7 +50,7 @@ func TestExamples(t *testing.T) {
 			subject:    "variant run app deploy on simple example w/ ns1",
 			args:       []string{"variant", "run", "app", "deploy", "--namespace", "ns1"},
 			variantDir: "./examples/simple",
-			expectErr:  "command \"bash -c     kubectl -n ns1 apply -f examples/simple/manifests/\n\": exit status 1",
+			expectErr:  "job \"shell\": command \"bash -c     kubectl -n ns1 apply -f examples/simple/manifests/\n\": exit status 1",
 		},
 		{
 			subject:    "variant run app deploy on simple example w/ default",
