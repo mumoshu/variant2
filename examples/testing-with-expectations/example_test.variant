@@ -31,7 +31,7 @@ test "example" {
     tenant = "wrongclient"
 
     err = <<EOS
-step "init": job "init": 1 error occurred:
+job "example": 1 error occurred:
 	* unexpected exec 1: expected args [-c cd account && terraform init && (terraform workspace select client || terraform workspace new client], got [-c cd account && terraform init && (terraform workspace select wrongclient || terraform workspace new wrongclient)]
 
     EOS
