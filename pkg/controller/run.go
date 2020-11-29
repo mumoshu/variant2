@@ -15,9 +15,9 @@ import (
 
 	// We import these here rather than in main to automate setting up cloud-provider-specific authentication strategies.
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 
 	// We import these here rather than in main to automate setting up cloud-provider-specific authentication strategies.
-	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	kconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"

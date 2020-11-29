@@ -3,8 +3,9 @@ package conf
 import (
 	"path/filepath"
 
-	"github.com/mumoshu/variant2/pkg/fs"
 	"golang.org/x/xerrors"
+
+	"github.com/mumoshu/variant2/pkg/fs"
 )
 
 const (

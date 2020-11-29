@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/hcl/v2"
+
 	"github.com/mumoshu/variant2/pkg/conf"
 	"github.com/mumoshu/variant2/pkg/fs"
 )

@@ -21,7 +21,6 @@ import (
 	gohcl2 "github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/imdario/mergo"
 	"github.com/kr/text"
-	"github.com/mumoshu/variant2/pkg/conf"
 	"github.com/pkg/errors"
 	"github.com/variantdev/dag/pkg/dag"
 	"github.com/variantdev/mod/pkg/shell"
@@ -33,6 +32,8 @@ import (
 	"github.com/zclconf/go-cty/cty/gocty"
 	"golang.org/x/xerrors"
 	"gopkg.in/yaml.v3"
+
+	"github.com/mumoshu/variant2/pkg/conf"
 )
 
 const (
@@ -203,6 +204,10 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 					depStdout += lastDepRes.Stdout
 				}
 			}
+		}
+
+		if err := app.checkoutSources(l, jobCtx, j.Sources, concurrency); err != nil {
+			return nil, err
 		}
 
 		r, err := app.execJobSteps(l, jobCtx, needs, j.Steps, concurrency, streamOutput)

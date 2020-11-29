@@ -9,11 +9,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mumoshu/variant2/pkg/app"
-	variantslack "github.com/mumoshu/variant2/pkg/slack"
 	"github.com/nlopes/slack"
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/xerrors"
+
+	"github.com/mumoshu/variant2/pkg/app"
+	variantslack "github.com/mumoshu/variant2/pkg/slack"
 )
 
 func (r *Runner) StartSlackbot(name string) error {

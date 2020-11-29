@@ -4,15 +4,17 @@ import (
 	"io"
 
 	"github.com/hashicorp/hcl/v2"
+
+	"github.com/mumoshu/variant2/pkg/source"
 )
 
 type Config struct {
 	Name string `hcl:"name,label"`
 
-	Sources []Source `hcl:"source,block"`
+	Sources []ConfigSource `hcl:"source,block"`
 }
 
-type Source struct {
+type ConfigSource struct {
 	Type string `hcl:"type,label"`
 
 	Body hcl.Body `hcl:",remain"`
@@ -142,6 +144,18 @@ type JobSpec struct {
 	Steps []Step `hcl:"step,block"`
 
 	Body hcl.Body `hcl:",remain"`
+
+	Sources []Source `hcl:"source,block"`
+}
+
+type Source struct {
+	ID string `hcl:"id,label"`
+	// Kind is the kind of source-controller source kind like "GitRepository" and "Bucket"
+	Kind string `hcl:"kind,attr"`
+	// Namespace is the K8s namespace of the source-controller source
+	Namepsace string `hcl:"namespace,attr"`
+	// Name defaults to ID
+	Name string `hcl:"name,attr"`
 }
 
 type LogSpec struct {
@@ -222,6 +236,8 @@ type App struct {
 	execInvocationCount int
 
 	expectedExecs []expectedExec
+
+	sourceClient *source.Client
 }
 
 func (app *App) ShallowCopy() App {

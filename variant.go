@@ -14,10 +14,11 @@ import (
 
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/mattn/go-isatty"
-	"github.com/mumoshu/variant2/pkg/app"
 	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/xerrors"
+
+	"github.com/mumoshu/variant2/pkg/app"
 )
 
 var Version string

@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"testing"
 
-	variant "github.com/mumoshu/variant2"
 	"golang.org/x/xerrors"
+
+	variant "github.com/mumoshu/variant2"
 )
 
 // Building the binary with `go build -o myapp main.go`

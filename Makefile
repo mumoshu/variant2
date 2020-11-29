@@ -3,12 +3,44 @@ build:
 	go build -o variant ./pkg/cmd
 
 bin/goimports:
-	GOBIN=$(PWD)/bin go install golang.org/x/tools/cmd/goimports
+	echo "Installing goimports"
+	@{ \
+	set -e ;\
+	INSTALL_TMP_DIR=$$(mktemp -d) ;\
+	cd $$INSTALL_TMP_DIR ;\
+	go mod init tmp ;\
+	GOBIN=$(PWD)/bin go install golang.org/x/tools/cmd/goimports ;\
+	rm -rf $$INSTALL_TMP_DIR ;\
+	}
+
+bin/gofumpt:
+	echo "Installing gofumpt"
+	@{ \
+	set -e ;\
+	INSTALL_TMP_DIR=$$(mktemp -d) ;\
+	cd $$INSTALL_TMP_DIR ;\
+	go mod init tmp ;\
+	GOBIN=$(PWD)/bin go install mvdan.cc/gofumpt ;\
+	rm -rf $$INSTALL_TMP_DIR ;\
+	}
+
+bin/gci:
+	echo "Installing gci"
+	@{ \
+	set -e ;\
+	INSTALL_TMP_DIR=$$(mktemp -d) ;\
+	cd $$INSTALL_TMP_DIR ;\
+	go mod init tmp ;\
+	GOBIN=$(PWD)/bin go install github.com/daixiang0/gci ;\
+	rm -rf $$INSTALL_TMP_DIR ;\
+	}
 
 .PHONY: fmt
-fmt: bin/goimports
-	bin/goimports -w pkg .
+fmt: bin/goimports bin/gci bin/gofumpt
 	gofmt -w -s pkg .
+	bin/gofumpt -w . || :
+	bin/gci -w -local github.com/mumoshu/variant2 . || :
+
 
 .PHONY: test
 test: build
@@ -16,7 +48,7 @@ test: build
 	PATH=$(PWD):$(PATH) go test -race -v ./...
 
 bin/golangci-lint:
-	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s v1.32.0
+	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s v1.33.0
 
 .PHONY: lint
 lint: bin/golangci-lint
@@ -26,7 +58,7 @@ lint: bin/golangci-lint
 	  --disable gochecknoglobals \
 	  --disable gochecknoinits \
 	  --disable gomnd,funlen,prealloc,gocritic,lll,gocognit \
-	  --disable testpackage,goerr113,exhaustivestruct,wrapcheck
+	  --disable testpackage,goerr113,exhaustivestruct,wrapcheck,paralleltest
 
 .PHONY: smoke
 smoke: export GOBIN=$(shell pwd)/tools

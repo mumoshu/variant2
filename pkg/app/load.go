@@ -11,10 +11,11 @@ import (
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hclparse"
-	"github.com/mumoshu/variant2/pkg/conf"
-	fs2 "github.com/mumoshu/variant2/pkg/fs"
 	"github.com/variantdev/mod/pkg/depresolver"
 	"github.com/zclconf/go-cty/cty"
+
+	"github.com/mumoshu/variant2/pkg/conf"
+	fs2 "github.com/mumoshu/variant2/pkg/fs"
 )
 
 const (
