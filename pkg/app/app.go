@@ -74,6 +74,7 @@ func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, str
 		if cmd != "" {
 			return nil, xerrors.Errorf("job %q: %w", cmd, err)
 		}
+
 		return nil, err
 	}
 
@@ -82,6 +83,7 @@ func (app *App) run(l *EventLogger, cmd string, args map[string]interface{}, str
 		if cmd != "" {
 			return nil, xerrors.Errorf("job %q: %w", cmd, err)
 		}
+
 		return nil, err
 	}
 
@@ -230,11 +232,9 @@ func (app *App) Job(l *EventLogger, cmd string, args map[string]interface{}, opt
 				return lastDepRes, nil
 			}
 
-			if err == nil {
-				if !cmdDefined {
-					return nil, xerrors.Errorf("job %q is not defined", cmd)
-				}
-
+			if err == nil && !cmdDefined {
+				return nil, xerrors.Errorf("job %q is not defined", cmd)
+			} else if err == nil {
 				return nil, errors.New(NoRunMessage)
 			}
 		} else {
