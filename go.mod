@@ -44,11 +44,11 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
-	k8s.io/apimachinery v0.19.4
+	k8s.io/apimachinery v0.18.9
 	k8s.io/client-go v10.0.0+incompatible
-	sigs.k8s.io/controller-runtime v0.6.3
+	sigs.k8s.io/controller-runtime v0.6.4
 )
 
 replace github.com/summerwind/whitebox-controller v0.7.1 => github.com/mumoshu/whitebox-controller v0.5.1-0.20201028130131-ac7a0743254b
 
-replace k8s.io/client-go v10.0.0+incompatible => k8s.io/client-go v0.19.4
+replace k8s.io/client-go v10.0.0+incompatible => k8s.io/client-go v0.18.9

@@ -174,14 +174,25 @@ func main() {
 		}
 	}
 
+	var modReplaces []string
+
 	modReplace := os.Getenv("VARIANT_BUILD_MOD_REPLACE")
 
-	if modReplace == "" {
-		// Required until https://github.com/summerwind/whitebox-controller/pull/8 is merged
-		modReplace = "github.com/summerwind/whitebox-controller@v0.7.1=github.com/mumoshu/whitebox-controller@v0.5.1-0.20201028130131-ac7a0743254b"
+	if modReplace != "" {
+		reps := strings.Split(modReplace, ",")
+
+		for _, rep := range reps {
+			modReplaces = append(modReplaces, rep)
+		}
 	}
 
-	if modReplace != "" {
+	// Required until https://github.com/summerwind/whitebox-controller/pull/8 is merged
+	modReplaces = append(modReplaces, "github.com/summerwind/whitebox-controller@v0.7.1=github.com/mumoshu/whitebox-controller@v0.5.1-0.20201028130131-ac7a0743254b")
+
+	// Required to fix go mod issue that k8s.io/client-go is somehow "updated" to invalid "v10.0.0+incompatible" on build
+	modReplaces = append(modReplaces, "k8s.io/client-go@v10.0.0+incompatible=k8s.io/client-go@v0.18.9")
+
+	for _, modReplace := range modReplaces {
 		_, err = app.execCmd(
 			Command{
 				Name: "sh",
