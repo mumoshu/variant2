@@ -31,11 +31,11 @@ test "example" {
     tenant = "wrongclient"
 
     err = <<EOS
-1 error occurred:
-	* unexpected exec 1: expected args [-c cd account && terraform init && (terraform workspace select client || terraform workspace new client], got [-c cd account && terraform init && (terraform workspace select wrongclient || terraform workspace new wrongclient)]
+job "example": 1 error occurred:
+	* step "init": job "init": unexpected exec 1: expected args [-c cd account && terraform init && (terraform workspace select client || terraform workspace new client], got [-c cd account && terraform init && (terraform workspace select wrongclient || terraform workspace new wrongclient)]
 
     EOS
-    exitstatus = 3
+    exitstatus = 1
 
     expected_exec_1 = "cd account && terraform init && (terraform workspace select client || terraform workspace new client"
     expected_exec_2 = "cd account && terraform destroy -var defaults_config_file=../../defaults.yaml -var tenant_config_file=../../${case.tenant}.yaml -auto-approve"

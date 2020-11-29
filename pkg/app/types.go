@@ -201,6 +201,8 @@ type expectedExec struct {
 }
 
 type Case struct {
+	SourceLocator hcl.Expression `hcl:"__source_locator,attr"`
+
 	Name string `hcl:"name,label"`
 
 	Args map[string]hcl.Expression `hcl:",remain"`
