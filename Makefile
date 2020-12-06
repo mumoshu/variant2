@@ -1,6 +1,20 @@
+VARIANT_SDK = github.com/mumoshu/variant2/pkg/sdk
+
+# NOTE:
+#   You can test the versioned build with e.g. `GITHUB_REF=refs/heads/v0.36.0 make build`
 .PHONY: build
 build:
-	go build -o variant ./pkg/cmd
+	@echo "Building variant"
+	@{ \
+	set -e ;\
+	source hack/sdk-vars.sh ;\
+	echo Using $(VAARIANT_SDK).Version=$${VERSION} ;\
+	echo Using $(VAARIANT_SDK).ModReplaces=$${MOD_REPLACES} ;\
+	set -x ;\
+	go build \
+	  -ldflags "-X $(VARIANT_SDK).Version=$${VERSION} -X $(VARIANT_SDK).ModReplaces=$${MOD_REPLACES}" \
+	  -o variant ./pkg/cmd ;\
+	}
 
 bin/goimports:
 	echo "Installing goimports"

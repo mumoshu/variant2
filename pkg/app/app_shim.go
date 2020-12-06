@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/mumoshu/variant2/pkg/conf"
 	"github.com/mumoshu/variant2/pkg/fs"
+	"github.com/mumoshu/variant2/pkg/sdk"
 )
 
 func (app *App) ExportBinary(srcDir, dstFile string) error {
@@ -50,6 +52,18 @@ func (app *App) ExportBinary(srcDir, dstFile string) error {
 }
 
 func (app *App) ExportGo(srcDir, dstDir string) error {
+	variantVer := sdk.Version
+	if variantVer == "" {
+		return errors.New("detected empty sdk.Version. This variant2 binary seems to be broken. " +
+			"Please rebuild it with `go build -ldflags \"-X github.com/mumoshu/variant2/pkg/sdk.Version=v${VERSION}\"")
+	}
+
+	modReplaces := strings.Split(sdk.ModReplaces, ",")
+	if len(modReplaces) == 0 {
+		return errors.New("detected empty sdk.ModReplaces. This variant2 binary seems to be broken. " +
+			"Please rebuild it with `go build -ldflags \"-X github.com/mumoshu/variant2/pkg/sdk.ModReplaces=v${MOD_REPLACES}\"")
+	}
+
 	if err := os.MkdirAll(dstDir, 0o755); err != nil {
 		return err
 	}
@@ -146,20 +160,21 @@ func main() {
 		return err
 	}
 
-	variantVer := os.Getenv("VARIANT_BUILD_VER")
-	if variantVer != "" {
-		_, err = app.execCmd(
-			nil,
-			Command{
-				Name: "sh",
-				Args: []string{"-c", fmt.Sprintf("cd %s; go mod edit -require=github.com/mumoshu/variant2@%s", dstDir, variantVer)},
-				Env:  map[string]string{},
-			},
-			true,
-		)
-		if err != nil {
-			return err
-		}
+	if v := os.Getenv("VARIANT_BUILD_VER"); v != "" {
+		variantVer = v
+	}
+
+	_, err = app.execCmd(
+		nil,
+		Command{
+			Name: "sh",
+			Args: []string{"-c", fmt.Sprintf("cd %s; go mod edit -require=github.com/mumoshu/variant2@%s", dstDir, variantVer)},
+			Env:  map[string]string{},
+		},
+		true,
+	)
+	if err != nil {
+		return err
 	}
 
 	variantReplace := os.Getenv("VARIANT_BUILD_VARIANT_REPLACE")
@@ -178,21 +193,11 @@ func main() {
 		}
 	}
 
-	var modReplaces []string
+	if rs := os.Getenv("VARIANT_BUILD_MOD_REPLACE"); rs != "" {
+		reps := strings.Split(rs, ",")
 
-	modReplace := os.Getenv("VARIANT_BUILD_MOD_REPLACE")
-
-	if modReplace != "" {
-		reps := strings.Split(modReplace, ",")
-
-		modReplaces = append(modReplaces, reps...)
+		modReplaces = reps
 	}
-
-	// Required until https://github.com/summerwind/whitebox-controller/pull/8 is merged
-	modReplaces = append(modReplaces, "github.com/summerwind/whitebox-controller@v0.7.1=github.com/mumoshu/whitebox-controller@v0.5.1-0.20201028130131-ac7a0743254b")
-
-	// Required to fix go mod issue that k8s.io/client-go is somehow "updated" to invalid "v10.0.0+incompatible" on build
-	modReplaces = append(modReplaces, "k8s.io/client-go@v10.0.0+incompatible=k8s.io/client-go@v0.18.9")
 
 	for _, modReplace := range modReplaces {
 		_, err = app.execCmd(
