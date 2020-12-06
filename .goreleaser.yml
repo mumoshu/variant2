@@ -5,6 +5,8 @@ builds:
   - CGO_ENABLED=0
   ldflags:
   - -s -w -X github.com/mumoshu/variant2/Version={{.Version}}
+  - -X github.com/mumoshu/variant2/pkg/sdk.Version={{.Env.Version}}
+  - -X github.com/mumoshu/variant2/pkg/sdk.ModReplaces={{.Env.ModReplaces}}
 changelog:
   filters:
     # commit messages matching the regexp listed here will be removed from
