@@ -26,7 +26,30 @@ jobs:
         which kubectl
         sudo apt-get update -y
         sudo apt-get install ruby -y
-        make test smoke
+        GITHUB_REF=refs/heads/v0.0.0 make test
+  smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go:
+        - 1.15.x
+    name: Go ${{ matrix.go }} smoke test
+    steps:
+    - uses: actions/checkout@master
+    - name: Setup Go
+      uses: actions/setup-go@v1
+      with:
+        go-version: ${{ matrix.go }}
+    - name: Run go mod download
+      run: go mod download
+    - name: Install SSH key
+      uses: shimataro/ssh-key-action@v2
+      with:
+        key: ${{ secrets.SSH_KEY }}
+        known_hosts: ${{ secrets.KNOWN_HOSTS }}
+    - name: Run tests
+      run: |
+        GITHUB_REF=refs/heads/v0.0.0 make smoke
   lint:
     runs-on: ubuntu-latest
     strategy:
@@ -44,3 +67,24 @@ jobs:
       run: go mod download
     - name: Run golangci-lint
       run: make lint
+  goreleaser-test:
+    runs-on: ubuntu-latest
+    steps:
+    -
+      name: Checkout
+      uses: actions/checkout@v1
+    -
+      name: Set up Go
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.15.x
+    -
+      name: Set goreleaser .Env
+      run: |
+        GITHUB_REF=refs/heads/v0.0.0 hack/sdk-vars.sh
+    -
+      name: Run GoReleaser
+      uses: goreleaser/goreleaser-action@v1
+      with:
+        version: latest
+        args: release --rm-dist --skip-publish

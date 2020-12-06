@@ -1,6 +1,20 @@
+VARIANT_SDK = github.com/mumoshu/variant2/pkg/sdk
+
+# NOTE:
+#   You can test the versioned build with e.g. `GITHUB_REF=refs/heads/v0.36.0 make build`
 .PHONY: build
 build:
-	go build -o variant ./pkg/cmd
+	@echo "Building variant"
+	@{ \
+	set -e ;\
+	. hack/sdk-vars.sh ;\
+	echo Using $(VAARIANT_SDK).Version=$${VERSION} ;\
+	echo Using $(VAARIANT_SDK).ModReplaces=$${MOD_REPLACES} ;\
+	set -x ;\
+	go build \
+	  -ldflags "-X $(VARIANT_SDK).Version=$${VERSION} -X $(VARIANT_SDK).ModReplaces=$${MOD_REPLACES}" \
+	  -o variant ./pkg/cmd ;\
+	}
 
 bin/goimports:
 	echo "Installing goimports"
@@ -98,13 +112,17 @@ smoke: build
 
 	make build
 	rm -rf build/simple
-	PATH=${PATH}:$(GOBIN) ./variant export go examples/simple build/simple
+	VARIANT_BUILD_VARIANT_REPLACE=$(shell pwd) \
+	  PATH=${PATH}:$(GOBIN) \
+	  ./variant export go examples/simple build/simple
 	cd build/simple; go build -o simple ./
 	build/simple/simple -h | tee smoke.log
 	grep "Namespace to interact with" smoke.log
 
 	rm build/simple/simple
-	PATH=${PATH}:$(GOBIN) ./variant export binary examples/simple build/simple
+	VARIANT_BUILD_VARIANT_REPLACE=$(shell pwd) \
+	  PATH=${PATH}:$(GOBIN) \
+	  ./variant export binary examples/simple build/simple
 	build/simple/simple -h | tee smoke2.log
 	grep "Namespace to interact with" smoke2.log
 
