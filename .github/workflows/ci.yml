@@ -26,7 +26,30 @@ jobs:
         which kubectl
         sudo apt-get update -y
         sudo apt-get install ruby -y
-        GITHUB_REF=refs/heads/v0.0.0 make test smoke
+        GITHUB_REF=refs/heads/v0.0.0 make test
+  smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go:
+        - 1.15.x
+    name: Go ${{ matrix.go }} test
+    steps:
+    - uses: actions/checkout@master
+    - name: Setup Go
+      uses: actions/setup-go@v1
+      with:
+        go-version: ${{ matrix.go }}
+    - name: Run go mod download
+      run: go mod download
+    - name: Install SSH key
+      uses: shimataro/ssh-key-action@v2
+      with:
+        key: ${{ secrets.SSH_KEY }}
+        known_hosts: ${{ secrets.KNOWN_HOSTS }}
+    - name: Run tests
+      run: |
+        GITHUB_REF=refs/heads/v0.0.0 make smoke
   lint:
     runs-on: ubuntu-latest
     strategy:

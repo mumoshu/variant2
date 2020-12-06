@@ -112,13 +112,17 @@ smoke: build
 
 	make build
 	rm -rf build/simple
-	PATH=${PATH}:$(GOBIN) ./variant export go examples/simple build/simple
+	VARIANT_BUILD_VARIANT_REPLACE=$(shell pwd) \
+	  PATH=${PATH}:$(GOBIN) \
+	  ./variant export go examples/simple build/simple
 	cd build/simple; go build -o simple ./
 	build/simple/simple -h | tee smoke.log
 	grep "Namespace to interact with" smoke.log
 
 	rm build/simple/simple
-	PATH=${PATH}:$(GOBIN) ./variant export binary examples/simple build/simple
+	VARIANT_BUILD_VARIANT_REPLACE=$(shell pwd) \
+	  PATH=${PATH}:$(GOBIN) \
+	  ./variant export binary examples/simple build/simple
 	build/simple/simple -h | tee smoke2.log
 	grep "Namespace to interact with" smoke2.log
 
