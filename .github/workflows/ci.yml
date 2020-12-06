@@ -33,7 +33,7 @@ jobs:
       matrix:
         go:
         - 1.15.x
-    name: Go ${{ matrix.go }} test
+    name: Go ${{ matrix.go }} smoke test
     steps:
     - uses: actions/checkout@master
     - name: Setup Go
