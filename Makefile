@@ -7,7 +7,7 @@ build:
 	@echo "Building variant"
 	@{ \
 	set -e ;\
-	source hack/sdk-vars.sh ;\
+	. hack/sdk-vars.sh ;\
 	echo Using $(VAARIANT_SDK).Version=$${VERSION} ;\
 	echo Using $(VAARIANT_SDK).ModReplaces=$${MOD_REPLACES} ;\
 	set -x ;\
