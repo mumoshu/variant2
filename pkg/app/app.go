@@ -1446,39 +1446,20 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 		for sourceIdx := range confSpec.Sources {
 			sourceSpec := confSpec.Sources[sourceIdx]
 
-			var yamlData []byte
-
-			var format string
-
-			var key string
+			var fragments []configFragment
 
 			switch sourceSpec.Type {
 			case "file":
-				var source SourceFile
-				if err := gohcl2.DecodeBody(sourceSpec.Body, confCtx, &source); err != nil {
-					return cty.NilVal, err
-				}
-
 				var err error
 
-				yamlData, err = ioutil.ReadFile(source.Path)
+				fragments, err = loadFileConfigSource(confCtx, sourceSpec)
 				if err != nil {
-					if source.Default == nil {
-						return cty.NilVal, fmt.Errorf("%s %q: source %d: %w", confType, confSpec.Name, sourceIdx, err)
-					}
-
-					yamlData = []byte(*source.Default)
-				}
-
-				format = FormatYAML
-
-				if source.Key != nil {
-					key = *source.Key
+					return cty.NilVal, xerrors.Errorf("%s %q: source %d: %w", confType, confSpec.Name, sourceIdx, err)
 				}
 			case "job":
 				var source SourceJob
 				if err := gohcl2.DecodeBody(sourceSpec.Body, confCtx, &source); err != nil {
-					return cty.NilVal, err
+					return cty.NilVal, xerrors.Errorf("decoding job body: %w", err)
 				}
 
 				args, err := buildArgsFromExpr(jobCtx.WithEvalContext(confCtx).Ptr(), source.Args)
@@ -1491,7 +1472,12 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 					return cty.NilVal, xerrors.Errorf("%s %q: source %d: %w", confType, confSpec.Name, sourceIdx, err)
 				}
 
-				yamlData = []byte(res.Stdout)
+				yamlData := []byte(res.Stdout)
+
+				var (
+					format string
+					key    string
+				)
 
 				if source.Format != nil {
 					format = *source.Format
@@ -1502,42 +1488,54 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 				if source.Key != nil {
 					key = *source.Key
 				}
+
+				fragments = append(fragments, configFragment{
+					data:   yamlData,
+					key:    key,
+					format: format,
+				})
 			default:
 				return cty.DynamicVal, fmt.Errorf("config source %q is not implemented. It must be either \"file\" or \"job\", so that it looks like `source file {` or `source file {`", sourceSpec.Type)
 			}
 
-			m := map[string]interface{}{}
+			for _, f := range fragments {
+				yamlData := f.data
+				format := f.format
+				key := f.key
 
-			switch format {
-			case FormatYAML:
-				if err := yaml.Unmarshal(yamlData, &m); err != nil {
-					return cty.NilVal, xerrors.Errorf("unmarshalling yaml: %w", err)
-				}
-			case FormatText:
-				if key == "" {
-					return cty.NilVal, fmt.Errorf("`key` must be specified for `text`-formatted source at %d", sourceIdx)
-				}
+				m := map[string]interface{}{}
 
-				keys := strings.Split(key, ".")
-				lastKeyIndex := len(keys) - 1
-				intermediateKeys := keys[0:lastKeyIndex]
-				lastKey := keys[lastKeyIndex]
-
-				cur := m
-
-				for _, k := range intermediateKeys {
-					if _, ok := cur[k]; !ok {
-						cur[k] = map[string]interface{}{}
+				switch format {
+				case FormatYAML:
+					if err := yaml.Unmarshal(yamlData, &m); err != nil {
+						return cty.NilVal, xerrors.Errorf("unmarshalling yaml: %w", err)
 					}
+				case FormatText:
+					if key == "" {
+						return cty.NilVal, fmt.Errorf("`key` must be specified for `text`-formatted source at %d", sourceIdx)
+					}
+
+					keys := strings.Split(key, ".")
+					lastKeyIndex := len(keys) - 1
+					intermediateKeys := keys[0:lastKeyIndex]
+					lastKey := keys[lastKeyIndex]
+
+					cur := m
+
+					for _, k := range intermediateKeys {
+						if _, ok := cur[k]; !ok {
+							cur[k] = map[string]interface{}{}
+						}
+					}
+
+					cur[lastKey] = string(yamlData)
+				default:
+					return cty.NilVal, fmt.Errorf("format %q is not implemented yet. It must be \"yaml\" or omitted", format)
 				}
 
-				cur[lastKey] = string(yamlData)
-			default:
-				return cty.NilVal, fmt.Errorf("format %q is not implemented yet. It must be \"yaml\" or omitted", format)
-			}
-
-			if err := mergo.Merge(&merged, m, mergo.WithOverride, mergo.WithOverwriteWithEmptyValue); err != nil {
-				return cty.NilVal, xerrors.Errorf("merging maps: %w", err)
+				if err := mergo.Merge(&merged, m, mergo.WithOverride, mergo.WithOverwriteWithEmptyValue); err != nil {
+					return cty.NilVal, xerrors.Errorf("merging maps: %w", err)
+				}
 			}
 		}
 

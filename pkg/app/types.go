@@ -22,9 +22,10 @@ type ConfigSource struct {
 }
 
 type SourceFile struct {
-	Path    string  `hcl:"path,attr"`
-	Default *string `hcl:"default,attr"`
-	Key     *string `hcl:"key,attr"`
+	Path    *string  `hcl:"path,attr"`
+	Paths   []string `hcl:"paths,optional"`
+	Default *string  `hcl:"default,attr"`
+	Key     *string  `hcl:"key,attr"`
 }
 
 type Step struct {
