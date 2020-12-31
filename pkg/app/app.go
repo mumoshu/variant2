@@ -1457,43 +1457,12 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 					return cty.NilVal, xerrors.Errorf("%s %q: source %d: %w", confType, confSpec.Name, sourceIdx, err)
 				}
 			case "job":
-				var source SourceJob
-				if err := gohcl2.DecodeBody(sourceSpec.Body, confCtx, &source); err != nil {
-					return cty.NilVal, xerrors.Errorf("decoding job body: %w", err)
-				}
+				var err error
 
-				args, err := buildArgsFromExpr(jobCtx.WithEvalContext(confCtx).Ptr(), source.Args)
-				if err != nil {
-					return cty.NilVal, err
-				}
-
-				res, err := app.run(jobCtx, nil, source.Name, args, false)
+				fragments, err = app.loadJobConfigSource(jobCtx, confCtx, sourceSpec)
 				if err != nil {
 					return cty.NilVal, xerrors.Errorf("%s %q: source %d: %w", confType, confSpec.Name, sourceIdx, err)
 				}
-
-				yamlData := []byte(res.Stdout)
-
-				var (
-					format string
-					key    string
-				)
-
-				if source.Format != nil {
-					format = *source.Format
-				} else {
-					format = FormatYAML
-				}
-
-				if source.Key != nil {
-					key = *source.Key
-				}
-
-				fragments = append(fragments, configFragment{
-					data:   yamlData,
-					key:    key,
-					format: format,
-				})
 			default:
 				return cty.DynamicVal, fmt.Errorf("config source %q is not implemented. It must be either \"file\" or \"job\", so that it looks like `source file {` or `source file {`", sourceSpec.Type)
 			}
