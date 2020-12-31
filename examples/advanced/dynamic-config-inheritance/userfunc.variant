@@ -1,0 +1,40 @@
+function "import" {
+  params = [config-dir, path]
+  result = flatten(concat([
+    for k, imports in yamldecode(file(format("%s/%s.yaml", config-dir, path))): [
+      for imported in imports: [
+        import(config-dir, imported)
+      ]
+    ] if k == "import"
+  ], [
+    format("%s/%s.yaml", config-dir, path)
+  ]))
+}
+
+job "userfunc stack config" {
+  concurrency = 1
+  description = "Generate stack config in YAML format"
+
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "s"
+  }
+
+  variable "files" {
+    value = import(opt.config-dir, opt.stack)
+  }
+
+  config "all" {
+    source file {
+      paths = var.files
+    }
+  }
+
+  exec {
+    command = "echo"
+    args = [
+      jsonencode(conf.all)
+    ]
+  }
+}

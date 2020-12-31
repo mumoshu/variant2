@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/hcl/v2"
+	"github.com/zclconf/go-cty/cty/function"
 
 	"github.com/mumoshu/variant2/pkg/source"
 )
@@ -238,4 +239,6 @@ type App struct {
 	sourceClient *source.Client
 
 	initMu sync.Mutex
+
+	Funcs map[string]function.Function
 }
