@@ -1427,6 +1427,7 @@ func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[stri
 	return jobCtx, nil
 }
 
+//nolint:unused
 func (app *App) getConfigs(jobCtx *JobContext, confType string, confSpecs []Config, g func(map[string]interface{}) (map[string]interface{}, error)) (cty.Value, error) {
 	confCtx := jobCtx.evalContext
 
@@ -1434,6 +1435,7 @@ func (app *App) getConfigs(jobCtx *JobContext, confType string, confSpecs []Conf
 
 	for confIndex := range confSpecs {
 		confSpec := confSpecs[confIndex]
+
 		v, err := app.evaluateConfig(jobCtx, confType, confSpec, confCtx, g)
 		if err != nil {
 			return cty.DynamicVal, err
@@ -1524,6 +1526,7 @@ func (app *App) evaluateConfig(jobCtx *JobContext, confType string, confSpec Con
 	return v, nil
 }
 
+//nolint:unused
 func (app *App) addConfigsAndVariablesDeprecated(jobCtx *JobContext, varSpecs []Variable, configs []Config, secrets []Config, g func(m map[string]interface{}) (map[string]interface{}, error)) (*hcl2.EvalContext, error) {
 	conf, err := app.getConfigs(jobCtx, "config", configs, nil)
 	if err != nil {
@@ -1547,14 +1550,14 @@ func (app *App) addConfigsAndVariablesDeprecated(jobCtx *JobContext, varSpecs []
 	return varCtx, nil
 }
 
+//nolint:gocyclo
 func (app *App) addConfigsAndVariables(jobCtx *JobContext, varSpecs []Variable, confSpecs []Config, secSpecs []Config, g func(m map[string]interface{}) (map[string]interface{}, error)) (*hcl2.EvalContext, error) {
 	ctx := jobCtx.evalContext
 
 	type node struct {
-		config       *Config
-		secret       *Config
-		variable     *Variable
-		dependencies []string
+		config   *Config
+		secret   *Config
+		variable *Variable
 	}
 
 	d := dag.New()
@@ -1660,6 +1663,7 @@ func (app *App) addConfigsAndVariables(jobCtx *JobContext, varSpecs []Variable, 
 	confFields := map[string]cty.Value{}
 	secFields := map[string]cty.Value{}
 
+	//nolint:nestif
 	for _, wave := range top {
 		ctx.Variables["var"] = cty.ObjectVal(varFields)
 		ctx.Variables["conf"] = cty.ObjectVal(confFields)
@@ -1755,21 +1759,21 @@ func evaluateVariable(varCtx *hcl2.EvalContext, varSpec Variable) (cty.Value, er
 		}
 
 		return val, nil
-	} else {
-		var v cty.Value
-
-		if err := gohcl2.DecodeExpression(varSpec.Value, varCtx, &v); err != nil {
-			return cty.DynamicVal, err
-		}
-
-		vty := v.Type()
-
-		if !tv.IsNull() && !vty.Equals(tpe) {
-			return cty.DynamicVal, fmt.Errorf("unexpected type of value for variable. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
-		}
-
-		return v, nil
 	}
+
+	var v cty.Value
+
+	if err := gohcl2.DecodeExpression(varSpec.Value, varCtx, &v); err != nil {
+		return cty.DynamicVal, err
+	}
+
+	vty := v.Type()
+
+	if !tv.IsNull() && !vty.Equals(tpe) {
+		return cty.DynamicVal, fmt.Errorf("unexpected type of value for variable. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
+	}
+
+	return v, nil
 }
 
 func nonEmptyExpression(x hcl2.Expression) bool {

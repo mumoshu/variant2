@@ -44,13 +44,17 @@ func loadConfigSourceContent(sourceSpec ConfigSource) (*hcl.BodyContent, error) 
 	schema, partial := gohcl2.ImpliedBodySchema(val.Interface())
 
 	var content *hcl.BodyContent
+
 	var _ hcl.Body
+
 	var diags hcl.Diagnostics
+
 	if partial {
 		content, _, diags = body.PartialContent(schema)
 	} else {
 		content, diags = body.Content(schema)
 	}
+
 	if content == nil {
 		return nil, diags
 	}
