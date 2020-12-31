@@ -1558,6 +1558,7 @@ func (app *App) addConfigsAndVariables(jobCtx *JobContext, varSpecs []Variable, 
 		config   *Config
 		secret   *Config
 		variable *Variable
+		deps     map[string]struct{}
 	}
 
 	d := dag.New()
@@ -1581,16 +1582,23 @@ func (app *App) addConfigsAndVariables(jobCtx *JobContext, varSpecs []Variable, 
 
 		id := fmt.Sprintf("var.%s", v.Name)
 
-		nodes[id] = node{
-			variable: &v,
-		}
+		depsMap := map[string]struct{}{}
 
 		var deps []string
 
 		for _, v := range v.Value.Variables() {
 			if d := dynamicDependencyName(v); d != nil {
-				deps = append(deps, *d)
+				depsMap[*d] = struct{}{}
 			}
+		}
+
+		nodes[id] = node{
+			variable: &v,
+			deps:     depsMap,
+		}
+
+		for d := range depsMap {
+			deps = append(deps, d)
 		}
 
 		d.Add(id, dag.Dependencies(deps))
@@ -1601,11 +1609,9 @@ func (app *App) addConfigsAndVariables(jobCtx *JobContext, varSpecs []Variable, 
 
 		id := fmt.Sprintf("conf.%s", c.Name)
 
-		nodes[id] = node{
-			config: &c,
-		}
-
 		var deps []string
+
+		depsMap := map[string]struct{}{}
 
 		for _, s := range c.Sources {
 			content, err := loadConfigSourceContent(s)
@@ -1616,10 +1622,19 @@ func (app *App) addConfigsAndVariables(jobCtx *JobContext, varSpecs []Variable, 
 			for _, a := range content.Attributes {
 				for _, v := range a.Expr.Variables() {
 					if d := dynamicDependencyName(v); d != nil {
-						deps = append(deps, *d)
+						depsMap[*d] = struct{}{}
 					}
 				}
 			}
+		}
+
+		nodes[id] = node{
+			config: &c,
+			deps:   depsMap,
+		}
+
+		for d := range depsMap {
+			deps = append(deps, d)
 		}
 
 		d.Add(id, dag.Dependencies(deps))
@@ -1630,11 +1645,9 @@ func (app *App) addConfigsAndVariables(jobCtx *JobContext, varSpecs []Variable, 
 
 		id := fmt.Sprintf("sec.%s", c.Name)
 
-		nodes[id] = node{
-			secret: &c,
-		}
-
 		var deps []string
+
+		depsMap := map[string]struct{}{}
 
 		for _, s := range c.Sources {
 			content, err := loadConfigSourceContent(s)
@@ -1645,13 +1658,30 @@ func (app *App) addConfigsAndVariables(jobCtx *JobContext, varSpecs []Variable, 
 			for _, a := range content.Attributes {
 				for _, v := range a.Expr.Variables() {
 					if d := dynamicDependencyName(v); d != nil {
-						deps = append(deps, *d)
+						depsMap[*d] = struct{}{}
 					}
 				}
 			}
 		}
 
+		nodes[id] = node{
+			secret: &c,
+			deps:   depsMap,
+		}
+
+		for d := range depsMap {
+			deps = append(deps, d)
+		}
+
 		d.Add(id, dag.Dependencies(deps))
+	}
+
+	for id, node := range nodes {
+		for dep := range node.deps {
+			if _, ok := nodes[dep]; !ok {
+				return nil, fmt.Errorf("%s depends on undefined variable %s", id, dep)
+			}
+		}
 	}
 
 	top, err := d.Sort()
@@ -1675,27 +1705,27 @@ func (app *App) addConfigsAndVariables(jobCtx *JobContext, varSpecs []Variable, 
 				return nil, xerrors.Errorf("missing node %s", info.Id)
 			}
 
-			if node.config != nil {
-				r, err := app.evaluateConfig(jobCtx, "config", *node.config, ctx, nil)
+			if v := node.config; v != nil {
+				r, err := app.evaluateConfig(jobCtx, "config", *v, ctx, nil)
 				if err != nil {
 					return nil, err
 				}
 
-				confFields[node.config.Name] = r
-			} else if node.secret != nil {
-				r, err := app.evaluateConfig(jobCtx, "secret", *node.secret, ctx, g)
+				confFields[v.Name] = r
+			} else if v := node.secret; v != nil {
+				r, err := app.evaluateConfig(jobCtx, "secret", *v, ctx, g)
 				if err != nil {
 					return nil, err
 				}
 
-				secFields[node.secret.Name] = r
-			} else if node.variable != nil {
-				r, err := evaluateVariable(ctx, *node.variable)
+				secFields[v.Name] = r
+			} else if v := node.variable; v != nil {
+				r, err := evaluateVariable(ctx, *v)
 				if err != nil {
-					return nil, xerrors.Errorf("%w", err)
+					return nil, err
 				}
 
-				varFields[node.variable.Name] = r
+				varFields[v.Name] = r
 			} else {
 				panic(fmt.Errorf("invalid state: either config or variable must be set in node: %+v", node))
 			}

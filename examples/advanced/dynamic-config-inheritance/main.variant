@@ -1,0 +1,48 @@
+option "config-dir" {
+  type = string
+}
+
+job "stack config" {
+  concurrency = 1
+  description = "Generate stack config in YAML format"
+
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "s"
+  }
+
+  variable "configs" {
+    value = flatten(concat([
+      # 1st level of imports
+      for k1, imports1 in yamldecode(file(format("%s/%s.yaml", opt.config-dir, opt.stack))): [
+        for import1 in imports1: concat([
+          # 1st level import's imports = 2nd level of imports
+          for k2, imports2 in yamldecode(file(format("%s/%s.yaml", opt.config-dir, import1))): [
+            for import2 in imports2: [
+              # 2nd level import's imports = 3rd level of imports
+              format("%s/%s.yaml", opt.config-dir, import2)
+            ]
+          ] if k2 == "import"
+        ], [
+          format("%s/%s.yaml", opt.config-dir, import1)
+        ])
+      ] if k1 == "import"
+    ], [
+      format("%s/%s.yaml", opt.config-dir, opt.stack)
+    ]))
+  }
+
+  config "all" {
+    source file {
+      paths = var.configs
+    }
+  }
+
+  exec {
+    command = "echo"
+    args = [
+      jsonencode(conf.all)
+    ]
+  }
+}

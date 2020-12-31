@@ -1,0 +1,9 @@
+import:
+- globals
+
+vars:
+  region: us-east-2
+  environment: ue2
+
+override_with_empty: []
+override_with_ints: [2]
