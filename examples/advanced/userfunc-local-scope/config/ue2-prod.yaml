@@ -1,0 +1,5 @@
+import:
+- ue2-globals
+
+vars:
+  stage: prod

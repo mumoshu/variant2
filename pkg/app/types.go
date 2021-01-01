@@ -241,4 +241,6 @@ type App struct {
 	initMu sync.Mutex
 
 	Funcs map[string]function.Function
+
+	JobLocalFuncs map[string]map[string]function.Function
 }

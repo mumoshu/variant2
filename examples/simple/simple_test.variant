@@ -9,7 +9,7 @@ test "app deploy" {
     namespace = "foo"
     exitstatus = 1
     err = trimspace(<<EOS
-job "app deploy": job "shell": command "bash -c     kubectl -n foo apply -f examples/simple/manifests/
+job "app deploy": job "shell": command "bash -c     kubectl -n foo apply -f ${abspath("manifests")}/
 ": exit status 1
 EOS
     )

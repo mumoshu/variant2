@@ -1354,8 +1354,16 @@ func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[stri
 		}
 	}
 
+	funcs := app.Funcs
+
+	if j.Name != "" && app.JobLocalFuncs != nil {
+		if fs, ok := app.JobLocalFuncs[j.Name]; ok {
+			funcs = fs
+		}
+	}
+
 	modCtx := &hcl2.EvalContext{
-		Functions: app.Funcs,
+		Functions: funcs,
 		Variables: map[string]cty.Value{
 			"param":   cty.ObjectVal(params),
 			"opt":     cty.ObjectVal(opts),

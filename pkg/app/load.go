@@ -15,6 +15,7 @@ import (
 	"github.com/variantdev/mod/pkg/depresolver"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/function"
+	"golang.org/x/xerrors"
 
 	"github.com/mumoshu/variant2/pkg/conf"
 	fs2 "github.com/mumoshu/variant2/pkg/fs"
@@ -321,6 +322,8 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 	var globals []JobSpec
 
 	jobByName := map[string]JobSpec{}
+	jobLocalFuncs := map[string]map[string]function.Function{}
+
 	for _, j := range jobs {
 		jobByName[j.Name] = j
 
@@ -341,6 +344,9 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 				if err != nil {
 					return nil, err
 				}
+
+				// Do not override tests
+				a.Config.Tests = cc.Tests
 
 				importedJobs := append([]JobSpec{a.Config.JobSpec}, a.Config.Jobs...)
 				for _, importedJob := range importedJobs {
@@ -377,6 +383,8 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 
 					jobByName[newJobName] = importedJob
 
+					jobLocalFuncs[newJobName] = a.Funcs
+
 					if j.Name == "" && importedJob.Name == "" {
 						conf = a.Config
 					}
@@ -407,6 +415,18 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 	app.Config.JobSpec = root
 
 	app.JobByName = jobByName
+
+	if app.JobLocalFuncs != nil {
+		for k, v := range app.JobLocalFuncs {
+			if _, ok := jobLocalFuncs[k]; ok {
+				return nil, xerrors.Errorf("conflicting local functions: local functions for job %q is already registered", k)
+			}
+
+			jobLocalFuncs[k] = v
+		}
+	}
+
+	app.JobLocalFuncs = jobLocalFuncs
 
 	var newJobs []JobSpec
 

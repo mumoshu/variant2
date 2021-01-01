@@ -1,0 +1,5 @@
+import = "../dynamic-config-inheritance"
+
+job "nested" {
+  import = "../dynamic-config-inheritance"
+}
