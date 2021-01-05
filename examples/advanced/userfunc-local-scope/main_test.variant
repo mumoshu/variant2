@@ -1,0 +1,165 @@
+test "imported userfunc stack config" {
+  case "ue2-prod" {
+    stack = "ue2-prod"
+    exitstatus = 0
+    err = ""
+    namespace = "eg"
+    region = "us-east-2"
+    environment = "ue2"
+    stage = "prod"
+    override_with_empty = []
+    override_with_ints = [2]
+  }
+
+  // missing stack config
+  case "ue1-prod" {
+    stack = "ue1-prod"
+    exitstatus = 1
+    err = trimspace(<<EOS
+job "userfunc stack config": ${abspath("../dynamic-config-inheritance/userfunc.variant")}:25,13-20: Error in function call; Call to function "import" failed: ${abspath("../dynamic-config-inheritance/userfunc.variant")}:4,39-46: Invalid function argument; Invalid value for "path" parameter: no file exists at config/ue1-prod.yaml; this function works only with files that are distributed as part of the configuration source code, so if this file will be created by a resource in this configuration you must instead obtain this result from an attribute of that resource..
+EOS
+    )
+    namespace = "UNDEFINED"
+    region = "UNDEFINED"
+    environment = "UNDEFINED"
+    stage = "UNDEFINED"
+    override_with_empty = "UNDEFINED"
+    override_with_ints = "UNDEFINED"
+  }
+
+  // missing stack config import
+  case "ue3-prod" {
+    stack = "ue3-prod"
+    exitstatus = 1
+    err = trimspace(<<EOS
+job "userfunc stack config": ${abspath("../dynamic-config-inheritance/userfunc.variant")}:25,13-20: Error in function call; Call to function "import" failed: ${abspath("../dynamic-config-inheritance/userfunc.variant")}:6,9-16: Error in function call; Call to function "import" failed: ${abspath("../dynamic-config-inheritance/userfunc.variant")}:4,39-46: Invalid function argument; Invalid value for "path" parameter: no file exists at config/ue3-globals.yaml; this function works only with files that are distributed as part of the configuration source code, so if this file will be created by a resource in this configuration you must instead obtain this result from an attribute of that resource...
+EOS
+    )
+    namespace = "UNDEFINED"
+    region = "UNDEFINED"
+    environment = "UNDEFINED"
+    stage = "UNDEFINED"
+    override_with_empty = "UNDEFINED"
+    override_with_ints = "UNDEFINED"
+  }
+
+  run "userfunc stack config" {
+    config-dir = "config"
+    stack = case.stack
+  }
+
+  assert "error" {
+    condition = run.err == case.err
+  }
+
+  assert "namespace" {
+    condition = (run.res.set && try(jsondecode(run.res.stdout).vars.namespace, "UNDEFINED") == case.namespace) || !run.res.set
+  }
+
+  assert "region" {
+    condition = (run.res.set && try(jsondecode(run.res.stdout).vars.region, "UNDEFINED") == case.region) || !run.res.set
+  }
+
+  assert "environment" {
+    condition = (run.res.set && try(jsondecode(run.res.stdout).vars.environment, "UNDEFINED") == case.environment) || !run.res.set
+  }
+
+  assert "stage" {
+    condition = (run.res.set && try(jsondecode(run.res.stdout).vars.stage, "UNDEFINED") == case.stage) || !run.res.set
+  }
+
+  assert "override_with_empty" {
+    condition = (run.res.set && try(jsondecode(run.res.stdout).override_with_empty, "UNDEFINED") == case.override_with_empty) || !run.res.set
+  }
+
+  assert "override_with_ints" {
+    condition = (run.res.set && try(jsondecode(run.res.stdout).override_with_ints, "UNDEFINED") == case.override_with_ints) || !run.res.set
+  }
+
+  assert "exitstatus" {
+    condition = (run.res.set && run.res.exitstatus == case.exitstatus) || !run.res.set
+  }
+}
+
+test "nested userfunc stack config" {
+  case "ue2-prod" {
+    stack = "ue2-prod"
+    exitstatus = 0
+    err = ""
+    namespace = "eg"
+    region = "us-east-2"
+    environment = "ue2"
+    stage = "prod"
+    override_with_empty = []
+    override_with_ints = [2]
+  }
+
+  // missing stack config
+  case "ue1-prod" {
+    stack = "ue1-prod"
+    exitstatus = 1
+    err = trimspace(<<EOS
+job "nested userfunc stack config": ${abspath("../dynamic-config-inheritance/userfunc.variant")}:25,13-20: Error in function call; Call to function "import" failed: ${abspath("../dynamic-config-inheritance/userfunc.variant")}:4,39-46: Invalid function argument; Invalid value for "path" parameter: no file exists at config/ue1-prod.yaml; this function works only with files that are distributed as part of the configuration source code, so if this file will be created by a resource in this configuration you must instead obtain this result from an attribute of that resource..
+EOS
+    )
+    namespace = "UNDEFINED"
+    region = "UNDEFINED"
+    environment = "UNDEFINED"
+    stage = "UNDEFINED"
+    override_with_empty = "UNDEFINED"
+    override_with_ints = "UNDEFINED"
+  }
+
+  // missing stack config import
+  case "ue3-prod" {
+    stack = "ue3-prod"
+    exitstatus = 1
+    err = trimspace(<<EOS
+job "nested userfunc stack config": ${abspath("../dynamic-config-inheritance/userfunc.variant")}:25,13-20: Error in function call; Call to function "import" failed: ${abspath("../dynamic-config-inheritance/userfunc.variant")}:6,9-16: Error in function call; Call to function "import" failed: ${abspath("../dynamic-config-inheritance/userfunc.variant")}:4,39-46: Invalid function argument; Invalid value for "path" parameter: no file exists at config/ue3-globals.yaml; this function works only with files that are distributed as part of the configuration source code, so if this file will be created by a resource in this configuration you must instead obtain this result from an attribute of that resource...
+EOS
+    )
+    namespace = "UNDEFINED"
+    region = "UNDEFINED"
+    environment = "UNDEFINED"
+    stage = "UNDEFINED"
+    override_with_empty = "UNDEFINED"
+    override_with_ints = "UNDEFINED"
+  }
+
+  run "nested userfunc stack config" {
+    config-dir = "config"
+    stack = case.stack
+  }
+
+  assert "error" {
+    condition = run.err == case.err
+  }
+
+  assert "namespace" {
+    condition = (run.res.set && try(jsondecode(run.res.stdout).vars.namespace, "UNDEFINED") == case.namespace) || !run.res.set
+  }
+
+  assert "region" {
+    condition = (run.res.set && try(jsondecode(run.res.stdout).vars.region, "UNDEFINED") == case.region) || !run.res.set
+  }
+
+  assert "environment" {
+    condition = (run.res.set && try(jsondecode(run.res.stdout).vars.environment, "UNDEFINED") == case.environment) || !run.res.set
+  }
+
+  assert "stage" {
+    condition = (run.res.set && try(jsondecode(run.res.stdout).vars.stage, "UNDEFINED") == case.stage) || !run.res.set
+  }
+
+  assert "override_with_empty" {
+    condition = (run.res.set && try(jsondecode(run.res.stdout).override_with_empty, "UNDEFINED") == case.override_with_empty) || !run.res.set
+  }
+
+  assert "override_with_ints" {
+    condition = (run.res.set && try(jsondecode(run.res.stdout).override_with_ints, "UNDEFINED") == case.override_with_ints) || !run.res.set
+  }
+
+  assert "exitstatus" {
+    condition = (run.res.set && run.res.exitstatus == case.exitstatus) || !run.res.set
+  }
+}

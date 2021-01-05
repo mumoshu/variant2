@@ -9,10 +9,13 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
+	"github.com/hashicorp/hcl/v2/ext/userfunc"
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/variantdev/mod/pkg/depresolver"
 	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/function"
+	"golang.org/x/xerrors"
 
 	"github.com/mumoshu/variant2/pkg/conf"
 	fs2 "github.com/mumoshu/variant2/pkg/fs"
@@ -79,11 +82,13 @@ func (l hcl2Loader) loadSources(srcs map[string][]byte) (*configurable, map[stri
 	}, nameToFiles, nil
 }
 
-func (t *configurable) HCL2Config() (*HCL2Config, error) {
+func (t *configurable) HCL2Config() (*HCL2Config, map[string]function.Function, error) {
 	config := &HCL2Config{}
 
+	funcs := conf.Functions(".")
+
 	ctx := &hcl.EvalContext{
-		Functions: conf.Functions("."),
+		Functions: funcs,
 		Variables: map[string]cty.Value{
 			"name": cty.StringVal("Ermintrude"),
 			"age":  cty.NumberIntVal(32),
@@ -95,12 +100,27 @@ func (t *configurable) HCL2Config() (*HCL2Config, error) {
 		},
 	}
 
-	diags := gohcl.DecodeBody(t.Body, ctx, config)
+	userfuncs, remain, diags := userfunc.DecodeUserFunctions(t.Body, "function", func() *hcl.EvalContext {
+		return ctx
+	})
 	if diags.HasErrors() {
-		return config, diags
+		return config, nil, diags
 	}
 
-	return config, nil
+	for k, v := range userfuncs {
+		if _, duplicated := funcs[k]; duplicated {
+			return nil, nil, fmt.Errorf("function %q can not be overridden by a user function with the same name", k)
+		}
+
+		funcs[k] = v
+	}
+
+	diags = gohcl.DecodeBody(remain, ctx, config)
+	if diags.HasErrors() {
+		return config, nil, diags
+	}
+
+	return config, funcs, nil
 }
 
 type Instance struct {
@@ -182,11 +202,12 @@ func New(setup Setup, opts ...Option) (*App, error) {
 		return nil, err
 	}
 
-	nameToFiles, cc, err := newConfigFromSources(instance.Sources)
+	nameToFiles, cc, funcs, err := newConfigFromSources(instance.Sources)
 
 	app := &App{
 		Files: nameToFiles,
 		Trace: os.Getenv("VARIANT_TRACE"),
+		Funcs: funcs,
 	}
 
 	if err != nil {
@@ -278,19 +299,19 @@ func findVariantFiles(fs *fs2.FileSystem, cacheDir string, dirPathOrURL string) 
 	return files, nil
 }
 
-func newConfigFromSources(srcs map[string][]byte) (map[string]*hcl.File, *HCL2Config, error) {
+func newConfigFromSources(srcs map[string][]byte) (map[string]*hcl.File, *HCL2Config, map[string]function.Function, error) {
 	l := &hcl2Loader{
 		Parser: hclparse.NewParser(),
 	}
 
 	c, nameToFiles, err := l.loadSources(srcs)
 	if err != nil {
-		return nameToFiles, nil, err
+		return nameToFiles, nil, nil, err
 	}
 
-	cc, err := c.HCL2Config()
+	cc, funcs, err := c.HCL2Config()
 
-	return nameToFiles, cc, err
+	return nameToFiles, cc, funcs, err
 }
 
 func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*App, error) {
@@ -301,6 +322,8 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 	var globals []JobSpec
 
 	jobByName := map[string]JobSpec{}
+	jobLocalFuncs := map[string]map[string]function.Function{}
+
 	for _, j := range jobs {
 		jobByName[j.Name] = j
 
@@ -321,6 +344,9 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 				if err != nil {
 					return nil, err
 				}
+
+				// Do not override tests
+				a.Config.Tests = cc.Tests
 
 				importedJobs := append([]JobSpec{a.Config.JobSpec}, a.Config.Jobs...)
 				for _, importedJob := range importedJobs {
@@ -357,6 +383,8 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 
 					jobByName[newJobName] = importedJob
 
+					jobLocalFuncs[newJobName] = a.Funcs
+
 					if j.Name == "" && importedJob.Name == "" {
 						conf = a.Config
 					}
@@ -387,6 +415,18 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 	app.Config.JobSpec = root
 
 	app.JobByName = jobByName
+
+	if app.JobLocalFuncs != nil {
+		for k, v := range app.JobLocalFuncs {
+			if _, ok := jobLocalFuncs[k]; ok {
+				return nil, xerrors.Errorf("conflicting local functions: local functions for job %q is already registered", k)
+			}
+
+			jobLocalFuncs[k] = v
+		}
+	}
+
+	app.JobLocalFuncs = jobLocalFuncs
 
 	var newJobs []JobSpec
 

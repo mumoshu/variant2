@@ -40,7 +40,7 @@ EOS
     exitstatus = 1
     out = ""
     err = trimspace(<<EOS
-job "config view": config "foo": source 1: open examples/config/conf/test.yaml: no such file or directory
+job "config view": config "foo": source 1: open ${abspath("conf/test.yaml")}: no such file or directory
 EOS
     )
   }
@@ -52,7 +52,7 @@ EOS
     exitstatus = 1
     out = ""
     err = trimspace(<<EOS
-job "config view": config "foo": source 2: open examples/config/conf/app3.yaml: no such file or directory
+job "config view": config "foo": source 2: open ${abspath("conf/app3.yaml")}: no such file or directory
 EOS
     )
   }

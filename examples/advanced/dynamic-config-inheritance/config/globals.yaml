@@ -1,0 +1,5 @@
+vars:
+  namespace: eg
+
+override_with_empty: [1]
+override_with_ints: [1]

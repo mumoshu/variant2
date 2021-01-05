@@ -14,6 +14,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func abspath(p string) string {
+	ap, err := filepath.Abs(p)
+	if err != nil {
+		panic(err)
+	}
+
+	return ap
+}
+
 func TestExamples(t *testing.T) {
 	testcases := []struct {
 		subject     string
@@ -143,7 +152,7 @@ func TestExamples(t *testing.T) {
 		{
 			subject:     "import/shebang",
 			variantName: "",
-			args:        []string{"variant", "./examples/advanced/import/mycli", "foo", "bar", "HELLO"},
+			args:        []string{"variant", "./mycli", "foo", "bar", "HELLO"},
 			wd:          "./examples/advanced/import",
 			expectOut:   "HELLO\n",
 		},
@@ -175,6 +184,18 @@ func TestExamples(t *testing.T) {
 			expectErr:   "loading command: merging globals: imported job \"\" has incompatible option \"project-dir\": needs type of cty.Number, encountered cty.String",
 		},
 		{
+			subject:     "dynamic-config-inheritance",
+			variantName: "",
+			args:        []string{"variant", "test"},
+			wd:          abspath("./examples/advanced/dynamic-config-inheritance"),
+		},
+		{
+			subject:     "userfunc-local-scope",
+			variantName: "",
+			args:        []string{"variant", "test"},
+			wd:          abspath("./examples/advanced/userfunc-local-scope"),
+		},
+		{
 			subject:     "options",
 			variantName: "",
 			args:        []string{"variant", "test"},
@@ -188,7 +209,7 @@ func TestExamples(t *testing.T) {
 		},
 		{
 			subject: "shebang",
-			args:    []string{"variant", "./test/shebang/myapp/myapp", "test", "--int1", "1", "--ints1", "1,2", "--str1", "a", "--strs1", "b,c"},
+			args:    []string{"variant", "./shebang/myapp/myapp", "test", "--int1", "1", "--ints1", "1,2", "--str1", "a", "--strs1", "b,c"},
 			wd:      "./test",
 		},
 		{
@@ -238,11 +259,28 @@ func TestExamples(t *testing.T) {
 		},
 	}
 
+	base, _ := os.Getwd()
+
 	for idx := range testcases {
 		i := idx
 		tc := testcases[i]
 
 		t.Run(fmt.Sprintf("%d: %s", i, tc.subject), func(t *testing.T) {
+			wd, err2 := filepath.Abs(tc.wd)
+			if err2 != nil {
+				t.Fatalf("determining directory: %v", err2)
+			}
+
+			if err := os.Chdir(wd); err != nil {
+				t.Fatalf("changing directory for test: %v", err)
+			}
+
+			defer func() {
+				if err := os.Chdir(base); err != nil {
+					t.Logf("changing directory back: %v", err)
+				}
+			}()
+
 			t.Logf("Running subtest: %d %s", i, tc.subject)
 
 			outRead, outWrite := io.Pipe()
@@ -260,8 +298,8 @@ func TestExamples(t *testing.T) {
 					}
 				},
 				Getwd: func() (string, error) {
-					if tc.wd != "" {
-						return tc.wd, nil
+					if wd != "" {
+						return wd, nil
 					}
 
 					return "", fmt.Errorf("Unexpected call to getw")

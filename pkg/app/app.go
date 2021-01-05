@@ -662,7 +662,7 @@ func (app *App) execTestCase(t Test, c Case) (*Result, error) {
 		},
 	}
 
-	ctx, err := addVariables(ctx, t.Variables)
+	ctx, err := setVariables(ctx, t.Variables)
 	if err != nil {
 		return nil, err
 	}
@@ -1354,9 +1354,16 @@ func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[stri
 		}
 	}
 
-	varSpecs := append(append([]Variable{}, cc.Variables...), j.Variables...)
+	funcs := app.Funcs
+
+	if j.Name != "" && app.JobLocalFuncs != nil {
+		if fs, ok := app.JobLocalFuncs[j.Name]; ok {
+			funcs = fs
+		}
+	}
+
 	modCtx := &hcl2.EvalContext{
-		Functions: conf.Functions("."),
+		Functions: funcs,
 		Variables: map[string]cty.Value{
 			"param":   cty.ObjectVal(params),
 			"opt":     cty.ObjectVal(opts),
@@ -1401,121 +1408,79 @@ func (app *App) createJobContext(cc *HCL2Config, j JobSpec, givenParams map[stri
 		globalArgs:  globalArgs,
 	}
 
-	conf, err := app.getConfigs(confJobCtx, cc, j, "config", func(j JobSpec) []Config { return j.Configs }, nil)
-	if err != nil {
-		return nil, err
-	}
+	varSpecs := append(append([]Variable{}, cc.Variables...), j.Variables...)
 
-	secJobCtx := confJobCtx.WithVariable("conf", conf).Ptr()
+	getConfigs := func(j JobSpec) []Config { return j.Configs }
+	configs := append(append([]Config{}, getConfigs(cc.JobSpec)...), getConfigs(j)...)
+
+	getSecrets := func(j JobSpec) []Config { return j.Secrets }
+	secrets := append(append([]Config{}, getSecrets(cc.JobSpec)...), getSecrets(j)...)
 
 	secretRefsEvaluator, err := vals.New(vals.Options{CacheSize: 100})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize vals: %w", err)
 	}
 
-	sec, err := app.getConfigs(secJobCtx, cc, j, "secret", func(j JobSpec) []Config { return j.Secrets }, func(m map[string]interface{}) (map[string]interface{}, error) {
+	g := func(m map[string]interface{}) (map[string]interface{}, error) {
 		return secretRefsEvaluator.Eval(m)
-	})
+	}
+
+	updatedContext, err := app.addConfigsAndVariables(confJobCtx, varSpecs, configs, secrets, g)
 	if err != nil {
 		return nil, err
 	}
 
-	varJobCtx := secJobCtx.WithVariable("sec", sec)
-
-	varCtx, err := addVariables(varJobCtx.evalContext, varSpecs)
-	if err != nil {
-		return nil, err
-	}
-
-	jobCtx := varJobCtx.WithEvalContext(varCtx).Ptr()
+	jobCtx := confJobCtx.WithEvalContext(updatedContext).Ptr()
 
 	return jobCtx, nil
 }
 
-func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confType string, f func(JobSpec) []Config, g func(map[string]interface{}) (map[string]interface{}, error)) (cty.Value, error) {
+//nolint:unused
+func (app *App) getConfigs(jobCtx *JobContext, confType string, confSpecs []Config, g func(map[string]interface{}) (map[string]interface{}, error)) (cty.Value, error) {
 	confCtx := jobCtx.evalContext
-
-	confSpecs := append(append([]Config{}, f(cc.JobSpec)...), f(j)...)
 
 	confFields := map[string]cty.Value{}
 
 	for confIndex := range confSpecs {
 		confSpec := confSpecs[confIndex]
-		merged := map[string]interface{}{}
 
-		for sourceIdx := range confSpec.Sources {
-			sourceSpec := confSpec.Sources[sourceIdx]
+		v, err := app.evaluateConfig(jobCtx, confType, confSpec, confCtx, g)
+		if err != nil {
+			return cty.DynamicVal, err
+		}
 
-			var yamlData []byte
+		confFields[confSpec.Name] = v
+	}
 
-			var format string
+	return cty.ObjectVal(confFields), nil
+}
 
-			var key string
+func (app *App) evaluateConfig(jobCtx *JobContext, confType string, confSpec Config, confCtx *hcl2.EvalContext, g func(map[string]interface{}) (map[string]interface{}, error)) (cty.Value, error) {
+	merged := map[string]interface{}{}
 
-			switch sourceSpec.Type {
-			case "file":
-				var source SourceFile
-				if err := gohcl2.DecodeBody(sourceSpec.Body, confCtx, &source); err != nil {
-					return cty.NilVal, err
-				}
+	for sourceIdx := range confSpec.Sources {
+		sourceSpec := confSpec.Sources[sourceIdx]
 
-				var err error
+		fragments, err := app.loadConfigSource(jobCtx, confCtx, sourceSpec)
+		if err != nil {
+			return cty.DynamicVal, xerrors.Errorf("%s %q: source %d: %w", confType, confSpec.Name, sourceIdx, err)
+		}
 
-				yamlData, err = ioutil.ReadFile(source.Path)
-				if err != nil {
-					if source.Default == nil {
-						return cty.NilVal, fmt.Errorf("%s %q: source %d: %w", confType, confSpec.Name, sourceIdx, err)
-					}
-
-					yamlData = []byte(*source.Default)
-				}
-
-				format = FormatYAML
-
-				if source.Key != nil {
-					key = *source.Key
-				}
-			case "job":
-				var source SourceJob
-				if err := gohcl2.DecodeBody(sourceSpec.Body, confCtx, &source); err != nil {
-					return cty.NilVal, err
-				}
-
-				args, err := buildArgsFromExpr(jobCtx.WithEvalContext(confCtx).Ptr(), source.Args)
-				if err != nil {
-					return cty.NilVal, err
-				}
-
-				res, err := app.run(jobCtx, nil, source.Name, args, false)
-				if err != nil {
-					return cty.NilVal, xerrors.Errorf("%s %q: source %d: %w", confType, confSpec.Name, sourceIdx, err)
-				}
-
-				yamlData = []byte(res.Stdout)
-
-				if source.Format != nil {
-					format = *source.Format
-				} else {
-					format = FormatYAML
-				}
-
-				if source.Key != nil {
-					key = *source.Key
-				}
-			default:
-				return cty.DynamicVal, fmt.Errorf("config source %q is not implemented. It must be either \"file\" or \"job\", so that it looks like `source file {` or `source file {`", sourceSpec.Type)
-			}
+		for _, f := range fragments {
+			yamlData := f.data
+			format := f.format
+			key := f.key
 
 			m := map[string]interface{}{}
 
 			switch format {
 			case FormatYAML:
 				if err := yaml.Unmarshal(yamlData, &m); err != nil {
-					return cty.NilVal, xerrors.Errorf("unmarshalling yaml: %w", err)
+					return cty.DynamicVal, xerrors.Errorf("unmarshalling yaml: %w", err)
 				}
 			case FormatText:
 				if key == "" {
-					return cty.NilVal, fmt.Errorf("`key` must be specified for `text`-formatted source at %d", sourceIdx)
+					return cty.DynamicVal, fmt.Errorf("`key` must be specified for `text`-formatted source at %d", sourceIdx)
 				}
 
 				keys := strings.Split(key, ".")
@@ -1533,100 +1498,320 @@ func (app *App) getConfigs(jobCtx *JobContext, cc *HCL2Config, j JobSpec, confTy
 
 				cur[lastKey] = string(yamlData)
 			default:
-				return cty.NilVal, fmt.Errorf("format %q is not implemented yet. It must be \"yaml\" or omitted", format)
+				return cty.DynamicVal, fmt.Errorf("format %q is not implemented yet. It must be \"yaml\" or omitted", format)
 			}
 
 			if err := mergo.Merge(&merged, m, mergo.WithOverride, mergo.WithOverwriteWithEmptyValue); err != nil {
-				return cty.NilVal, xerrors.Errorf("merging maps: %w", err)
+				return cty.DynamicVal, xerrors.Errorf("merging maps: %w", err)
 			}
 		}
-
-		if g != nil {
-			r, err := g(merged)
-			if err != nil {
-				return cty.NilVal, err
-			}
-
-			merged = r
-		}
-
-		yamlData, err := yaml.Marshal(merged)
-		if err != nil {
-			return cty.NilVal, xerrors.Errorf("generating yaml: %w", err)
-		}
-
-		ty, err := ctyyaml.ImpliedType(yamlData)
-		if err != nil {
-			return cty.DynamicVal, xerrors.Errorf("determining type of %s: %w", string(yamlData), err)
-		}
-
-		v, err := ctyyaml.Unmarshal(yamlData, ty)
-		if err != nil {
-			return cty.DynamicVal, xerrors.Errorf("unmarshalling %s: %w", string(yamlData), err)
-		}
-
-		confFields[confSpec.Name] = v
 	}
 
-	return cty.ObjectVal(confFields), nil
+	if g != nil {
+		r, err := g(merged)
+		if err != nil {
+			return cty.DynamicVal, err
+		}
+
+		merged = r
+	}
+
+	yamlData, err := yaml.Marshal(merged)
+	if err != nil {
+		return cty.DynamicVal, xerrors.Errorf("generating yaml: %w", err)
+	}
+
+	ty, err := ctyyaml.ImpliedType(yamlData)
+	if err != nil {
+		return cty.DynamicVal, xerrors.Errorf("determining type of %s: %w", string(yamlData), err)
+	}
+
+	v, err := ctyyaml.Unmarshal(yamlData, ty)
+	if err != nil {
+		return cty.DynamicVal, xerrors.Errorf("unmarshalling %s: %w", string(yamlData), err)
+	}
+
+	return v, nil
 }
 
-func addVariables(varCtx *hcl2.EvalContext, varSpecs []Variable) (*hcl2.EvalContext, error) {
+//nolint:unused
+func (app *App) addConfigsAndVariablesDeprecated(jobCtx *JobContext, varSpecs []Variable, configs []Config, secrets []Config, g func(m map[string]interface{}) (map[string]interface{}, error)) (*hcl2.EvalContext, error) {
+	conf, err := app.getConfigs(jobCtx, "config", configs, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	secJobCtx := jobCtx.WithVariable("conf", conf).Ptr()
+
+	sec, err := app.getConfigs(secJobCtx, "secret", secrets, g)
+	if err != nil {
+		return nil, err
+	}
+
+	varJobCtx := secJobCtx.WithVariable("sec", sec)
+
+	varCtx, err := setVariables(varJobCtx.evalContext, varSpecs)
+	if err != nil {
+		return nil, err
+	}
+
+	return varCtx, nil
+}
+
+//nolint:gocyclo
+func (app *App) addConfigsAndVariables(jobCtx *JobContext, varSpecs []Variable, confSpecs []Config, secSpecs []Config, g func(m map[string]interface{}) (map[string]interface{}, error)) (*hcl2.EvalContext, error) {
+	ctx := jobCtx.evalContext
+
+	type node struct {
+		config   *Config
+		secret   *Config
+		variable *Variable
+		deps     map[string]struct{}
+	}
+
+	d := dag.New()
+
+	nodes := map[string]node{}
+
+	dynamicDependencyName := func(v hcl2.Traversal) *string {
+		if !v.IsRelative() && (v.RootName() == "conf" || v.RootName() == "var" || v.RootName() == "sec") {
+			if r, ok := v.SimpleSplit().Rel[0].(hcl2.TraverseAttr); ok {
+				id := fmt.Sprintf("%s.%s", v.RootName(), r.Name)
+
+				return &id
+			}
+		}
+
+		return nil
+	}
+
+	for i := range varSpecs {
+		v := varSpecs[i]
+
+		id := fmt.Sprintf("var.%s", v.Name)
+
+		depsMap := map[string]struct{}{}
+
+		var deps []string
+
+		for _, v := range v.Value.Variables() {
+			if d := dynamicDependencyName(v); d != nil {
+				depsMap[*d] = struct{}{}
+			}
+		}
+
+		nodes[id] = node{
+			variable: &v,
+			deps:     depsMap,
+		}
+
+		for d := range depsMap {
+			deps = append(deps, d)
+		}
+
+		d.Add(id, dag.Dependencies(deps))
+	}
+
+	for i := range confSpecs {
+		c := confSpecs[i]
+
+		id := fmt.Sprintf("conf.%s", c.Name)
+
+		var deps []string
+
+		depsMap := map[string]struct{}{}
+
+		for _, s := range c.Sources {
+			content, err := loadConfigSourceContent(s)
+			if err != nil {
+				return nil, xerrors.Errorf("loading config %s's %s source: %w", c.Name, s.Type, err)
+			}
+
+			for _, a := range content.Attributes {
+				for _, v := range a.Expr.Variables() {
+					if d := dynamicDependencyName(v); d != nil {
+						depsMap[*d] = struct{}{}
+					}
+				}
+			}
+		}
+
+		nodes[id] = node{
+			config: &c,
+			deps:   depsMap,
+		}
+
+		for d := range depsMap {
+			deps = append(deps, d)
+		}
+
+		d.Add(id, dag.Dependencies(deps))
+	}
+
+	for i := range secSpecs {
+		c := secSpecs[i]
+
+		id := fmt.Sprintf("sec.%s", c.Name)
+
+		var deps []string
+
+		depsMap := map[string]struct{}{}
+
+		for _, s := range c.Sources {
+			content, err := loadConfigSourceContent(s)
+			if err != nil {
+				return nil, xerrors.Errorf("loading config %s's %s source: %w", c.Name, s.Type, err)
+			}
+
+			for _, a := range content.Attributes {
+				for _, v := range a.Expr.Variables() {
+					if d := dynamicDependencyName(v); d != nil {
+						depsMap[*d] = struct{}{}
+					}
+				}
+			}
+		}
+
+		nodes[id] = node{
+			secret: &c,
+			deps:   depsMap,
+		}
+
+		for d := range depsMap {
+			deps = append(deps, d)
+		}
+
+		d.Add(id, dag.Dependencies(deps))
+	}
+
+	for id, node := range nodes {
+		for dep := range node.deps {
+			if _, ok := nodes[dep]; !ok {
+				return nil, fmt.Errorf("%s depends on undefined variable %s", id, dep)
+			}
+		}
+	}
+
+	top, err := d.Sort()
+	if err != nil {
+		return nil, xerrors.Errorf("resolving dependencies among variables and configs: %w", err)
+	}
+
+	varFields := map[string]cty.Value{}
+	confFields := map[string]cty.Value{}
+	secFields := map[string]cty.Value{}
+
+	//nolint:nestif
+	for _, wave := range top {
+		ctx.Variables["var"] = cty.ObjectVal(varFields)
+		ctx.Variables["conf"] = cty.ObjectVal(confFields)
+		ctx.Variables["sec"] = cty.ObjectVal(secFields)
+
+		for _, info := range wave {
+			node, ok := nodes[info.Id]
+			if !ok {
+				return nil, xerrors.Errorf("missing node %s", info.Id)
+			}
+
+			if v := node.config; v != nil {
+				r, err := app.evaluateConfig(jobCtx, "config", *v, ctx, nil)
+				if err != nil {
+					return nil, err
+				}
+
+				confFields[v.Name] = r
+			} else if v := node.secret; v != nil {
+				r, err := app.evaluateConfig(jobCtx, "secret", *v, ctx, g)
+				if err != nil {
+					return nil, err
+				}
+
+				secFields[v.Name] = r
+			} else if v := node.variable; v != nil {
+				r, err := evaluateVariable(ctx, *v)
+				if err != nil {
+					return nil, err
+				}
+
+				varFields[v.Name] = r
+			} else {
+				panic(fmt.Errorf("invalid state: either config or variable must be set in node: %+v", node))
+			}
+		}
+	}
+
+	ctx.Variables["var"] = cty.ObjectVal(varFields)
+	ctx.Variables["conf"] = cty.ObjectVal(confFields)
+	ctx.Variables["sec"] = cty.ObjectVal(secFields)
+
+	return ctx, nil
+}
+
+func setVariables(varCtx *hcl2.EvalContext, varSpecs []Variable) (*hcl2.EvalContext, error) {
 	varFields := map[string]cty.Value{}
 
 	for _, varSpec := range varSpecs {
-		var tpe cty.Type
-
-		tv, _ := varSpec.Type.Value(nil)
-
-		if !tv.IsNull() {
-			var diags hcl2.Diagnostics
-
-			tpe, diags = typeexpr.TypeConstraint(varSpec.Type)
-			if diags != nil {
-				return varCtx, diags
-			}
+		val, err := evaluateVariable(varCtx, varSpec)
+		if err != nil {
+			return nil, err
 		}
 
-		//nolint:nestif
-		if tpe.IsListType() && tpe.ListElementType().Equals(cty.String) {
-			var v []string
-			if err := gohcl2.DecodeExpression(varSpec.Value, varCtx, &v); err != nil {
-				return varCtx, err
-			}
-
-			if vty, err := gocty.ImpliedType(v); err != nil {
-				return varCtx, err
-			} else if vty != tpe {
-				return varCtx, fmt.Errorf("unexpected type of option. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
-			}
-
-			val, err := gocty.ToCtyValue(v, tpe)
-			if err != nil {
-				return varCtx, err
-			}
-
-			varFields[varSpec.Name] = val
-		} else {
-			var v cty.Value
-
-			if err := gohcl2.DecodeExpression(varSpec.Value, varCtx, &v); err != nil {
-				return varCtx, err
-			}
-
-			vty := v.Type()
-
-			if !tv.IsNull() && !vty.Equals(tpe) {
-				return varCtx, fmt.Errorf("unexpected type of value for variable. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
-			}
-
-			varFields[varSpec.Name] = v
-		}
+		varFields[varSpec.Name] = val
 
 		varCtx.Variables["var"] = cty.ObjectVal(varFields)
 	}
 
 	return varCtx, nil
+}
+
+func evaluateVariable(varCtx *hcl2.EvalContext, varSpec Variable) (cty.Value, error) {
+	var tpe cty.Type
+
+	tv, _ := varSpec.Type.Value(nil)
+
+	if !tv.IsNull() {
+		var diags hcl2.Diagnostics
+
+		tpe, diags = typeexpr.TypeConstraint(varSpec.Type)
+		if diags != nil {
+			return cty.DynamicVal, diags
+		}
+	}
+
+	//nolint:nestif
+	if tpe.IsListType() && tpe.ListElementType().Equals(cty.String) {
+		var v []string
+		if err := gohcl2.DecodeExpression(varSpec.Value, varCtx, &v); err != nil {
+			return cty.DynamicVal, err
+		}
+
+		if vty, err := gocty.ImpliedType(v); err != nil {
+			return cty.DynamicVal, err
+		} else if vty != tpe {
+			return cty.DynamicVal, fmt.Errorf("unexpected type of option. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
+		}
+
+		val, err := gocty.ToCtyValue(v, tpe)
+		if err != nil {
+			return cty.DynamicVal, err
+		}
+
+		return val, nil
+	}
+
+	var v cty.Value
+
+	if err := gohcl2.DecodeExpression(varSpec.Value, varCtx, &v); err != nil {
+		return cty.DynamicVal, err
+	}
+
+	vty := v.Type()
+
+	if !tv.IsNull() && !vty.Equals(tpe) {
+		return cty.DynamicVal, fmt.Errorf("unexpected type of value for variable. want %q, got %q", tpe.FriendlyNameForConstraint(), vty.FriendlyName())
+	}
+
+	return v, nil
 }
 
 func nonEmptyExpression(x hcl2.Expression) bool {

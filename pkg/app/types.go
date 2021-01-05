@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/hcl/v2"
+	"github.com/zclconf/go-cty/cty/function"
 
 	"github.com/mumoshu/variant2/pkg/source"
 )
@@ -22,9 +23,10 @@ type ConfigSource struct {
 }
 
 type SourceFile struct {
-	Path    string  `hcl:"path,attr"`
-	Default *string `hcl:"default,attr"`
-	Key     *string `hcl:"key,attr"`
+	Path    *string  `hcl:"path,attr"`
+	Paths   []string `hcl:"paths,optional"`
+	Default *string  `hcl:"default,attr"`
+	Key     *string  `hcl:"key,attr"`
 }
 
 type Step struct {
@@ -237,4 +239,8 @@ type App struct {
 	sourceClient *source.Client
 
 	initMu sync.Mutex
+
+	Funcs map[string]function.Function
+
+	JobLocalFuncs map[string]map[string]function.Function
 }
