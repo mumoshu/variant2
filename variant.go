@@ -428,7 +428,11 @@ func getMergedParamsAndOpts(
 func (m *Main) initApp(setup app.Setup) (*app.App, error) {
 	ap, err := app.New(setup)
 	if err != nil {
-		ap.PrintError(err)
+		if ap == nil {
+			fmt.Fprintf(os.Stderr, "%+v\n", err)
+		} else {
+			ap.PrintError(err)
+		}
 
 		//nolint:wrapcheck
 		return nil, err

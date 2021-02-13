@@ -398,7 +398,7 @@ func newApp(app *App, cc *HCL2Config, importDir func(string) (*App, error)) (*Ap
 	for _, g := range globals {
 		merged, err := mergeParamsAndOpts(g, root)
 		if err != nil {
-			return nil, fmt.Errorf("merging globals: %w", err)
+			return app, fmt.Errorf("merging globals: %w", err)
 		}
 
 		root = *merged
