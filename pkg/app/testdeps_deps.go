@@ -55,6 +55,8 @@ func (TestDeps) WriteProfileTo(name string, w io.Writer, debug int) error {
 	return pprof.Lookup(name).WriteTo(w, debug)
 }
 
+func (TestDeps) SetPanicOnExit0(bool) {}
+
 // ImportPath is the import path of the testing binary, set by the generated main function.
 var ImportPath string
 
