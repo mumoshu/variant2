@@ -6,7 +6,7 @@ jobs:
     strategy:
       matrix:
         go:
-        - 1.15.x
+        - 1.16.x
     name: Go ${{ matrix.go }} test
     steps:
     - uses: actions/checkout@master
@@ -32,7 +32,7 @@ jobs:
     strategy:
       matrix:
         go:
-        - 1.15.x
+        - 1.16.x
     name: Go ${{ matrix.go }} smoke test
     steps:
     - uses: actions/checkout@master
@@ -55,7 +55,7 @@ jobs:
     strategy:
       matrix:
         go:
-        - 1.15.x
+        - 1.16.x
     name: Go ${{ matrix.go }} lint
     steps:
     - uses: actions/checkout@master
@@ -77,7 +77,7 @@ jobs:
       name: Set up Go
       uses: actions/setup-go@v1
       with:
-        go-version: 1.15.x
+        go-version: 1.16.x
     -
       name: Set goreleaser .Env
       run: |
