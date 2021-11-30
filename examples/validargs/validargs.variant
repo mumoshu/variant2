@@ -1,0 +1,11 @@
+job "echo" {
+  parameter "color" {
+    type = string
+    validargs = ["red", "yellow"]
+  }
+  
+  exec {
+    command = "echo"
+    args = [param.color]
+  }
+}

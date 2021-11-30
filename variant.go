@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -19,6 +20,8 @@ import (
 	"golang.org/x/xerrors"
 
 	"github.com/mumoshu/variant2/pkg/app"
+
+	gohcl2 "github.com/hashicorp/hcl/v2/gohcl"
 )
 
 var Version string
@@ -292,6 +295,18 @@ func createCobraFlagsFromVariantOptions(cli *cobra.Command, opts []app.OptionSpe
 	return lazyOptionValues, nil
 }
 
+// workaround for this issue: https://github.com/spf13/cobra/issues/745
+func makeCustomArgsValidator(checks []cobra.PositionalArgs) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		for _, check := range checks {
+			if err := check(cmd, args); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
 func configureCommand(cli *cobra.Command, root app.JobSpec, interactive bool) (*Config, error) {
 	lazyOptionValues, err := createCobraFlagsFromVariantOptions(cli, root.Options, interactive)
 	if err != nil {
@@ -319,6 +334,16 @@ func configureCommand(cli *cobra.Command, root app.JobSpec, interactive bool) (*
 		maxArgs++
 
 		p := root.Parameters[i]
+		if p.ValidArgs != nil {
+			var validArgs []string
+			var evalCtx hcl.EvalContext
+			if diags := gohcl2.DecodeExpression(p.ValidArgs, &evalCtx, &validArgs); diags.HasErrors() {
+				return nil, diags
+			}
+			cli.ValidArgs = validArgs
+			cli.Args = cobra.OnlyValidArgs
+		}
+
 		r := p.Default.Range()
 
 		if r.Start == r.End {
@@ -371,9 +396,19 @@ func configureCommand(cli *cobra.Command, root app.JobSpec, interactive bool) (*
 	}
 
 	if hasVarArgs {
-		cli.Args = cobra.MinimumNArgs(minArgs)
+		if cli.Args != nil {
+			var checks []cobra.PositionalArgs
+			checks = append(checks, cli.Args)
+			checks = append(checks, cobra.MinimumNArgs(minArgs))
+			cli.Args = makeCustomArgsValidator(checks)
+		}
 	} else {
-		cli.Args = cobra.RangeArgs(minArgs, maxArgs)
+		if cli.Args != nil {
+			var checks []cobra.PositionalArgs
+			checks = append(checks, cli.Args)
+			checks = append(checks, cobra.RangeArgs(minArgs, maxArgs))
+			cli.Args = makeCustomArgsValidator(checks)
+		}
 	}
 
 	params := func(args []string) (map[string]interface{}, error) {

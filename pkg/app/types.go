@@ -77,9 +77,10 @@ type DynamicRun struct {
 type Parameter struct {
 	Name string `hcl:"name,label"`
 
-	Type    hcl.Expression `hcl:"type,attr"`
-	Default hcl.Expression `hcl:"default,attr"`
-	Envs    []EnvSource    `hcl:"env,block"`
+	Type      hcl.Expression `hcl:"type,attr"`
+	Default   hcl.Expression `hcl:"default,attr"`
+	Envs      []EnvSource    `hcl:"env,block"`
+	ValidArgs hcl.Expression `hcl:"validargs,attr"`
 
 	Description *string `hcl:"description,attr"`
 }
